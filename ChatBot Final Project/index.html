@@ -12,7 +12,13 @@
 <body>
 
     <section class="chat-window">
-        <button class="close">x close</button>
+        <button class="close" aria-label="Close">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <circle cx="10" cy="10" r="10" fill="#27ae60" fill-opacity="0.9"/>
+                <line x1="6" y1="6" x2="14" y2="14" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                <line x1="14" y1="6" x2="6" y2="14" stroke="white" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+        </button>
         <div class="chat">
             <div class="model">
                 <p>Hi, how can I help you?</p>

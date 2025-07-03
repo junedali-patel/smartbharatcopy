@@ -4,13 +4,14 @@ import { BlurView } from 'expo-blur';
 import { router } from 'expo-router';
 import { Audio } from 'expo-av';
 import { collection, getDocs } from 'firebase/firestore';
-import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View, TextInput, Animated } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Image, Linking, Platform, Modal, TextInput, KeyboardAvoidingView, ActivityIndicator, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeColor } from '../../hooks/useThemeColor';
 import { db } from '../../config/firebase'; // Import db from firebase config
 import VoiceService from '../../services/VoiceService';
 import { GEMINI_API_KEY, isGeminiAvailable } from '../../constants/config';
+import CropDiseaseModal from '../../components/CropDiseaseModal';
 
 type TabRoute = '/' | '/schemes' | '/explore' | '/tasks' | '/profile';
 
@@ -154,7 +155,9 @@ export default function HomeScreen() {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [assistantResponse, setAssistantResponse] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [buttonPressed, setButtonPressed] = useState(null);
+  const [isWeatherModalVisible, setWeatherModalVisible] = useState(false);
+  const [isCropModalVisible, setCropModalVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentTranscript, setCurrentTranscript] = useState('');
   const voiceService = useRef<VoiceService | null>(null);
@@ -166,7 +169,8 @@ export default function HomeScreen() {
   const [currentContext, setCurrentContext] = useState<string>('');
   const [selectedLanguage, setSelectedLanguage] = useState('hindi');
   const [showLanguageSelector, setShowLanguageSelector] = useState(false);
-  
+  const [isProcessing, setIsProcessing] = useState(false);
+
   const languages = [
     { code: 'hindi', name: 'हिंदी', greeting: 'नमस्ते' },
     { code: 'english', name: 'English', greeting: 'Hello' },
@@ -175,7 +179,7 @@ export default function HomeScreen() {
     { code: 'gujarati', name: 'ગુજરાતી', greeting: 'નમસ્તે' },
     { code: 'bengali', name: 'বাংলা', greeting: 'নমস্কার' },
   ];
-  
+
   const handleAssistantVisibility = (visible: boolean) => {
     if (!visible && isListening) {
       voiceService.current?.stopListening();
@@ -183,7 +187,7 @@ export default function HomeScreen() {
     }
     setAssistantVisible(visible);
   };
-  
+
   // Use white background for all layouts
   const backgroundColor = '#ffffff';
   const cardBackground = '#ffffff';
@@ -195,7 +199,6 @@ export default function HomeScreen() {
   const quickActions = [
     { id: '1', title: 'Apply for Scheme', icon: 'gift' as const, color: '#FF9500', route: '/schemes' as TabRoute },
     { id: '2', title: 'Check Status', icon: 'search' as const, color: '#34C759', route: '/schemes' as TabRoute },
-    { id: '3', title: 'Find Services', icon: 'compass' as const, color: '#5856D6', route: '/explore' as TabRoute },
     { id: '4', title: 'Voice Assistant', icon: 'microphone' as const, color: '#FF3B30', route: '/tasks' as TabRoute },
   ];
 
@@ -206,7 +209,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     voiceService.current = VoiceService.getInstance();
-    
+
     // Set up speech result callback with language awareness
     voiceService.current.setOnSpeechResult((text: string) => {
       setTranscript(text);
@@ -578,23 +581,25 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
         </View>
 
         {/* Weather Section */}
-        <View style={[styles.weatherCard, { backgroundColor: cardBackground, borderColor }]}>
-          <View style={styles.weatherHeader}>
-            <FontAwesome name="cloud" size={24} color={accentColor} />
-            <Text style={[styles.weatherTitle, { color: textColor }]}>Weather Update</Text>
+        <TouchableOpacity onPress={() => setWeatherModalVisible(true)}>
+          <View style={[styles.weatherCard, { backgroundColor: cardBackground, borderColor }]}>
+            <View style={styles.weatherHeader}>
+              <FontAwesome name="cloud" size={24} color={accentColor} />
+              <Text style={[styles.weatherTitle, { color: textColor }]}>Weather Update</Text>
+            </View>
+            <View style={styles.weatherDetails}>
+              <Text style={[styles.weatherText, { color: textColor }]}>
+                Temperature: 28°C
+              </Text>
+              <Text style={[styles.weatherText, { color: textColor }]}>
+                Humidity: 65%
+              </Text>
+              <Text style={[styles.weatherText, { color: textColor }]}>
+                Wind: 12 km/h
+              </Text>
+            </View>
           </View>
-          <View style={styles.weatherDetails}>
-            <Text style={[styles.weatherText, { color: textColor }]}>
-              Temperature: 28°C
-            </Text>
-            <Text style={[styles.weatherText, { color: textColor }]}>
-              Humidity: 65%
-            </Text>
-            <Text style={[styles.weatherText, { color: textColor }]}>
-              Wind: 12 km/h
-            </Text>
-          </View>
-        </View>
+        </TouchableOpacity>
 
         {/* Quick Actions */}
         <View style={styles.quickActionsContainer}>
@@ -612,6 +617,10 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
                 </Text>
               </TouchableOpacity>
             ))}
+            <TouchableOpacity style={styles.quickActionCard} onPress={() => setCropModalVisible(true)}>
+              <FontAwesome name="medkit" size={24} color="#D35400" />
+              <Text style={styles.quickActionText}>Crop-Checkup</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -650,6 +659,33 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
         <NewsSection />
       </ScrollView>
 
+      {/* Weather Details Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={isWeatherModalVisible}
+        onRequestClose={() => setWeatherModalVisible(false)}
+      >
+        <View style={styles.weatherModalContainer}>
+          <View style={styles.weatherModalView}>
+            <Text style={styles.weatherModalTitle}>Detailed Weather Report</Text>
+            <Text style={styles.weatherModalText}>Location: Pune, Maharashtra</Text>
+            <Text style={styles.weatherModalText}>Temperature: 28°C (Feels like 30°C)</Text>
+            <Text style={styles.weatherModalText}>Forecast: Partly cloudy with a chance of rain.</Text>
+            <Text style={styles.weatherModalText}>Wind: 12 km/h from SW</Text>
+            <Text style={styles.weatherModalText}>Humidity: 65%</Text>
+            <Text style={styles.weatherModalText}>UV Index: 5 (Moderate)</Text>
+            <Text style={styles.weatherModalText}>Analysis: Good day to stay indoors during the afternoon.</Text>
+            <TouchableOpacity
+              style={styles.weatherModalCloseButton}
+              onPress={() => setWeatherModalVisible(false)}
+            >
+              <Text style={styles.weatherModalCloseButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Chat Button */}
       <TouchableOpacity
         style={styles.chatButton}
@@ -667,34 +703,19 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
       >
         <View style={[styles.chatWindow, isAssistantVisible && styles.chatOpen]}>
           <View style={styles.chatHeader}>
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => handleAssistantVisibility(false)}
-            >
-              <Text style={styles.closeButtonText}>×</Text>
-            </TouchableOpacity>
+            <Text style={{ color: '#333', fontSize: 16, fontWeight: 'bold' }}>Smart Assistant</Text>
             <View style={styles.chatControls}>
-              <TouchableOpacity 
-                style={styles.languageButton}
-                onPress={() => setShowLanguageSelector(!showLanguageSelector)}
-              >
-                <MaterialIcons name="language" size={24} color="white" />
+              <TouchableOpacity onPress={() => setShowLanguageSelector(!showLanguageSelector)}>
+                <MaterialIcons name="language" size={22} color="#555" />
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.clearButton}
-                onPress={clearChat}
-              >
-                <MaterialIcons name="delete" size={24} color="white" />
+              <TouchableOpacity onPress={toggleMute}>
+                <MaterialIcons name={isMuted ? 'volume-off' : 'volume-up'} size={22} color="#555" />
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.muteButton, isMuted && styles.muteButtonActive]} 
-                onPress={toggleMute}
-              >
-                <MaterialIcons 
-                  name={isMuted ? "volume-off" : "volume-up"} 
-                  size={24} 
-                  color="white" 
-                />
+              <TouchableOpacity onPress={clearChat}>
+                <MaterialIcons name="delete" size={22} color="#555" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => handleAssistantVisibility(false)}>
+                <MaterialIcons name="close" size={22} color="#555" />
               </TouchableOpacity>
             </View>
           </View>
@@ -763,6 +784,11 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
           </View>
         </View>
       </Modal>
+
+      <CropDiseaseModal
+        visible={isCropModalVisible}
+        onClose={() => setCropModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -934,56 +960,53 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
   },
-  modalContainer: {
+
+  weatherModalContainer: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
-  modalContent: {
-    flex: 1,
-    backgroundColor: '#fff',
-    marginTop: 50,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    overflow: 'hidden',
+  weatherModalView: {
+    margin: 20,
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 25,
+    alignItems: 'flex-start',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    width: '90%',
   },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-  },
-  modalTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  modalTitle: {
+  weatherModalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+    width: '100%',
   },
-  modalControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
+  weatherModalText: {
+    fontSize: 16,
+    marginBottom: 10,
   },
-  muteButton: {
-    padding: 8,
+  weatherModalCloseButton: {
+    backgroundColor: '#2E7D32',
     borderRadius: 20,
-    backgroundColor: '#34C759',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    elevation: 2,
+    marginTop: 15,
+    alignSelf: 'center',
   },
-  muteButtonActive: {
-    backgroundColor: '#FF3B30',
-  },
-  closeButton: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: '#1a1a1a',
-  },
-  closeButtonText: {
+  weatherModalCloseButtonText: {
     color: 'white',
-    fontSize: 20,
     fontWeight: 'bold',
+    textAlign: 'center',
   },
   chatContainer: {
     flex: 1,
@@ -1094,7 +1117,15 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   quickActionsContainer: {
-    marginBottom: 20,
+    marginBottom: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
   },
   quickActionsTitle: {
     fontSize: 18,
@@ -1105,26 +1136,23 @@ const styles = StyleSheet.create({
   quickActionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
+    marginTop: 12,
   },
   quickActionCard: {
-    width: '48%',
-    padding: 15,
-    borderRadius: 12,
     alignItems: 'center',
-    marginBottom: 15,
-    ...Platform.select({
-      web: {
-        boxShadow: '0px 2px 3.84px rgba(0, 0, 0, 0.1)',
-      },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3.84,
-        elevation: 5,
-      },
-    }),
+    borderRadius: 12,
+    padding: 16,
+    width: '46%',
+    marginBottom: 16,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.05)',
   },
   quickActionText: {
     fontSize: 14,
@@ -1132,7 +1160,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   recentSchemesContainer: {
-    marginBottom: 20,
+    marginBottom: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
   },
   recentSchemesTitle: {
     fontSize: 18,
@@ -1143,20 +1179,15 @@ const styles = StyleSheet.create({
   schemeCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 15,
-    marginBottom: 15,
-    ...Platform.select({
-      web: {
-        boxShadow: '0px 2px 3.84px rgba(0, 0, 0, 0.1)',
-      },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3.84,
-        elevation: 5,
-      },
-    }),
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.05)',
   },
   schemeTitle: {
     fontSize: 16,
@@ -1250,7 +1281,6 @@ const styles = StyleSheet.create({
   newsTitle: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 8,
   },
   newsDescription: {
     fontSize: 14,
@@ -1342,88 +1372,72 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   weatherCard: {
-    padding: 20,
-    borderRadius: 12,
-    marginBottom: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
     borderWidth: 1,
-    ...Platform.select({
-      web: {
-        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.05)',
-      },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 2,
-      },
-    }),
+    borderColor: 'rgba(0, 0, 0, 0.05)',
   },
   weatherHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   weatherTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     marginLeft: 10,
   },
   weatherDetails: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
+    marginTop: 8,
   },
   weatherText: {
-    fontSize: 16,
+    fontSize: 14,
   },
   chatButton: {
     position: 'absolute',
-    bottom: 60,
+    bottom: 20,
     right: 20,
     zIndex: 998,
-    backgroundColor: '#1a1a1a',
-    height: 80,
-    width: 80,
-    borderRadius: 100,
+    backgroundColor: '#2E7D32',
+    height: 60,
+    width: 60,
+    borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
-    ...Platform.select({
-      web: {
-        boxShadow: 'rgba(0, 0, 0, 0.24) 0px 3px 8px',
-      },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.24,
-        shadowRadius: 8,
-        elevation: 5,
-      },
-    }),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
   },
   chatWindow: {
     display: 'none',
-    ...Platform.select({
-      web: {
-        boxShadow: 'rgba(0, 0, 0, 0.24) 0px 3px 8px',
-      },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.24,
-        shadowRadius: 8,
-        elevation: 5,
-      },
-    }),
-    backgroundColor: 'white',
-    borderRadius: 20,
     position: 'absolute',
     zIndex: 999,
-    bottom: 60,
+    bottom: 90,
     right: 20,
-    height: 650,
-    width: 380,
+    height: 600,
+    width: 360,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
     flexDirection: 'column',
     justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.05)',
   },
   chatOpen: {
     display: 'flex',
@@ -1432,10 +1446,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#1a1a1a',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: 'transparent',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
   },
   chatControls: {
     flexDirection: 'row',
@@ -1454,7 +1470,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
   },
   userMessage: {
-    backgroundColor: '#3d88f9',
+    backgroundColor: '#2E7D32',
     color: 'white',
     alignSelf: 'flex-end',
   },
@@ -1464,51 +1480,46 @@ const styles = StyleSheet.create({
     color: 'red',
   },
   inputArea: {
-    height: 70,
+    height: 'auto',
+    minHeight: 60,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderTopWidth: 1,
-    borderTopColor: 'lightgray',
+    borderTopColor: '#e9ecef',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
   },
   input: {
     height: 40,
     flex: 1,
-    borderWidth: 0,
-    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: '#ced4da',
+    backgroundColor: '#fff',
     borderRadius: 20,
-    paddingLeft: 20,
-    fontSize: 16,
+    paddingLeft: 16,
+    paddingRight: 16,
+    fontSize: 14,
   },
   sendButton: {
     height: 40,
     width: 40,
-    borderRadius: 100,
+    borderRadius: 20,
     borderWidth: 0,
-    marginLeft: 12,
-    backgroundColor: '#3d88f9',
+    marginLeft: 8,
+    backgroundColor: '#2E7D32',
     justifyContent: 'center',
     alignItems: 'center',
-    ...Platform.select({
-      web: {
-        boxShadow: 'rgba(0, 0, 0, 0.24) 0px 3px 8px',
-      },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.24,
-        shadowRadius: 8,
-        elevation: 5,
-      },
-    }),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 4,
   },
   loader: {
     width: 40,
-    opacity: 0.4,
-    aspectRatio: 4,
-    backgroundColor: '#000',
-    borderRadius: 4,
+    height: 40,
   },
   chat: {
     flex: 1,

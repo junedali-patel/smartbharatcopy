@@ -2,7 +2,7 @@ import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import * as Speech from 'expo-speech';
 import * as Notifications from 'expo-notifications';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeColor } from '../../hooks/useThemeColor';
@@ -52,6 +52,43 @@ export default function TasksScreen() {
   const [expoPushToken, setExpoPushToken] = useState<string | undefined>();
   const [lastSpeechTime, setLastSpeechTime] = useState<number>(0);
   const AUTO_STOP_DELAY = 1500; // 1.5 seconds delay before auto-stopping
+
+  const [selectedCategory, setSelectedCategory] = useState<'all' | 'farming' | 'personal' | 'general'>('all');
+  const categories: ('all' | 'farming' | 'personal' | 'general')[] = ['all', 'farming', 'personal', 'general'];
+
+  const { ongoingTasks, completedTasks } = useMemo(() => {
+    const ongoing: Task[] = [];
+    const completed: Task[] = [];
+    tasks.forEach(task => {
+      if (task.completed) {
+        completed.push(task);
+      } else {
+        ongoing.push(task);
+      }
+    });
+    return { ongoingTasks: ongoing, completedTasks: completed };
+  }, [tasks]);
+
+  const filteredTasks = useMemo(() => {
+    if (selectedCategory === 'all') {
+      return ongoingTasks;
+    }
+    return ongoingTasks.filter(task => task.category === selectedCategory);
+  }, [ongoingTasks, selectedCategory]);
+
+  const groupedTasks = useMemo(() => {
+    const groups: { high: Task[], medium: Task[], low: Task[] } = {
+      high: [],
+      medium: [],
+      low: [],
+    };
+    filteredTasks.forEach(task => {
+      if (groups[task.priority]) {
+        groups[task.priority].push(task);
+      }
+    });
+    return groups;
+  }, [filteredTasks]);
 
   // Initialize VoiceService
   const voiceService = VoiceService.getInstance();
@@ -494,72 +531,156 @@ export default function TasksScreen() {
       </View>
 
       {/* Tasks List */}
+      <View style={styles.filterContainer}>
+        <Text style={styles.filterTitle}>Category</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScrollView}>
+          {categories.map((category) => (
+            <TouchableOpacity
+              key={category}
+              style={[
+                styles.filterButton,
+                selectedCategory === category && styles.filterButtonActive,
+              ]}
+              onPress={() => setSelectedCategory(category)}
+            >
+              <Text
+                style={[
+                  styles.filterButtonText,
+                  selectedCategory === category && styles.filterButtonTextActive,
+                ]}
+              >
+                {category.charAt(0).toUpperCase() + category.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {tasks.length === 0 ? (
+        {filteredTasks.length === 0 && completedTasks.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <FontAwesome name="tasks" size={50} color="#ccc" />
-            <Text style={[styles.emptyText, { color: textColor }]}>No tasks yet</Text>
-            <Text style={[styles.emptySubtext, { color: textColor }]}>
-              Add a task manually or use voice commands
+            <FontAwesome name="tasks" size={48} color="#ced4da" />
+            <Text style={styles.emptyText}>No Tasks Yet</Text>
+            <Text style={styles.emptySubtext}>
+              Add a new task using the input below or the voice assistant.
             </Text>
           </View>
         ) : (
-          tasks.map(task => (
-            <View key={task.id} style={[styles.taskCard, { backgroundColor: cardBackground, borderColor }]}>
-              <TouchableOpacity 
-                style={styles.checkboxContainer} 
-                onPress={() => toggleTaskStatus(task.id)}
-              >
-                <FontAwesome 
-                  name={task.completed ? "check-circle" : "circle-o"} 
-                  size={24} 
-                  color={task.completed ? accentColor : "#ccc"} 
-                />
-              </TouchableOpacity>
-              
-              <View style={styles.taskContent}>
-                <Text 
-                  style={[
-                    styles.taskTitle, 
-                    { color: textColor },
-                    task.completed && styles.completedTask
-                  ]}
-                >
-                  {task.title}
-                </Text>
-                
-                <View style={styles.taskDetails}>
-                  <View style={styles.taskDetail}>
-                    <FontAwesome name="flag" size={14} color={getPriorityColor(task.priority)} />
-                    <Text style={[styles.taskDetailText, { color: textColor }]}>
-                      {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.taskDetail}>
-                    <FontAwesome name={getCategoryIcon(task.category)} size={14} color="#666" />
-                    <Text style={[styles.taskDetailText, { color: textColor }]}>
-                      {task.category.charAt(0).toUpperCase() + task.category.slice(1)}
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.taskDetail}>
-                    <FontAwesome name="calendar" size={14} color="#666" />
-                    <Text style={[styles.taskDetailText, { color: textColor }]}>
-                      {task.dueDate} at {task.dueTime}
-                    </Text>
-                  </View>
+          <>
+            {Object.entries(groupedTasks).map(([priority, tasks]) =>
+              tasks.length > 0 ? (
+                <View key={priority} style={styles.prioritySection}>
+                  <Text style={styles.priorityTitle}>
+                    {priority.charAt(0).toUpperCase() + priority.slice(1)} Priority
+                  </Text>
+                  {tasks.map(task => (
+                    <View key={task.id} style={styles.taskCard}>
+                      <TouchableOpacity
+                        style={styles.checkboxContainer}
+                        onPress={() => toggleTaskStatus(task.id)}
+                      >
+                        <FontAwesome
+                          name={task.completed ? 'check-square-o' : 'square-o'}
+                          size={20}
+                          color={task.completed ? '#2E7D32' : '#6c757d'}
+                        />
+                      </TouchableOpacity>
+
+                      <View style={styles.taskContent}>
+                        <Text style={[styles.taskTitle, task.completed && styles.completedTask]}>
+                          {task.title}
+                        </Text>
+                        <View style={styles.taskDetails}>
+                          <View style={styles.taskDetail}>
+                            <FontAwesome
+                              name="tag"
+                              size={12}
+                              color={getPriorityColor(task.priority)}
+                            />
+                            <Text style={styles.taskDetailText}>{task.priority}</Text>
+                          </View>
+                                                    <View style={styles.taskDetail}>
+                            <FontAwesome name={getCategoryIcon(task.category) as any} size={12} color="#6c757d" />
+                            <Text style={styles.taskDetailText}>{task.category}</Text>
+                          </View>
+                          <View style={styles.taskDetail}>
+                            <FontAwesome name="calendar" size={12} color="#6c757d" />
+                            <Text style={styles.taskDetailText}>{task.dueDate}</Text>
+                          </View>
+                          <View style={styles.taskDetail}>
+                            <FontAwesome name="clock-o" size={12} color="#6c757d" />
+                            <Text style={styles.taskDetailText}>{task.dueTime}</Text>
+                          </View>
+                        </View>
+                      </View>
+
+                      <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={() => deleteTask(task.id)}
+                      >
+                        <FontAwesome name="trash" size={18} color="#e53935" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
                 </View>
+              ) : null
+            )}
+
+            {completedTasks.length > 0 && (
+              <View style={styles.prioritySection}>
+                <Text style={styles.priorityTitle}>Completed</Text>
+                {completedTasks.map(task => (
+                  <View key={task.id} style={styles.taskCard}>
+                    <TouchableOpacity
+                      style={styles.checkboxContainer}
+                      onPress={() => toggleTaskStatus(task.id)}
+                    >
+                      <FontAwesome
+                        name={task.completed ? 'check-square-o' : 'square-o'}
+                        size={20}
+                        color={task.completed ? '#2E7D32' : '#6c757d'}
+                      />
+                    </TouchableOpacity>
+
+                    <View style={styles.taskContent}>
+                      <Text style={[styles.taskTitle, task.completed && styles.completedTask]}>
+                        {task.title}
+                      </Text>
+                      <View style={styles.taskDetails}>
+                        <View style={styles.taskDetail}>
+                          <FontAwesome
+                            name="tag"
+                            size={12}
+                            color={getPriorityColor(task.priority)}
+                          />
+                          <Text style={styles.taskDetailText}>{task.priority}</Text>
+                        </View>
+                                                <View style={styles.taskDetail}>
+                          <FontAwesome name={getCategoryIcon(task.category) as any} size={12} color="#6c757d" />
+                          <Text style={styles.taskDetailText}>{task.category}</Text>
+                        </View>
+                        <View style={styles.taskDetail}>
+                          <FontAwesome name="calendar" size={12} color="#6c757d" />
+                          <Text style={styles.taskDetailText}>{task.dueDate}</Text>
+                        </View>
+                        <View style={styles.taskDetail}>
+                          <FontAwesome name="clock-o" size={12} color="#6c757d" />
+                          <Text style={styles.taskDetailText}>{task.dueTime}</Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.deleteButton}
+                      onPress={() => deleteTask(task.id)}
+                    >
+                      <FontAwesome name="trash" size={18} color="#e53935" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
               </View>
-              
-              <TouchableOpacity 
-                style={styles.deleteButton} 
-                onPress={() => deleteTask(task.id)}
-              >
-                <FontAwesome name="trash" size={18} color="#e53935" />
-              </TouchableOpacity>
-            </View>
-          ))
+            )}
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -569,19 +690,21 @@ export default function TasksScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f8f9fa',
   },
   header: {
-    padding: 16,
+    padding: 12,
     borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
   },
   voiceSection: {
-    padding: 16,
+    padding: 12,
     borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
   },
   voiceHeader: {
     flexDirection: 'row',
@@ -590,14 +713,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   voiceTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
   },
   micButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f5f5f5',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#e9ecef',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -614,7 +737,7 @@ const styles = StyleSheet.create({
   },
   recordingText: {
     marginLeft: 8,
-    fontSize: 14,
+    fontSize: 12,
   },
   transcriptContainer: {
     padding: 12,
@@ -623,12 +746,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   transcriptLabel: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '500',
     marginBottom: 4,
   },
   transcriptText: {
-    fontSize: 16,
+    fontSize: 14,
   },
   processingContainer: {
     flexDirection: 'row',
@@ -637,7 +760,7 @@ const styles = StyleSheet.create({
   },
   processingText: {
     marginLeft: 8,
-    fontSize: 14,
+    fontSize: 12,
   },
   responseContainer: {
     padding: 12,
@@ -646,12 +769,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   responseLabel: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '500',
     marginBottom: 4,
   },
   responseText: {
-    fontSize: 16,
+    fontSize: 14,
   },
   errorContainer: {
     padding: 12,
@@ -661,31 +784,35 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: '#e53935',
-    fontSize: 14,
+    fontSize: 12,
   },
   inputContainer: {
     flexDirection: 'row',
-    padding: 16,
-    borderBottomWidth: 1,
+    padding: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e9ecef',
+    alignItems: 'center',
   },
   input: {
     flex: 1,
-    height: 50,
+    height: 40,
     borderWidth: 1,
-    borderRadius: 8,
+    borderColor: '#ced4da',
+    borderRadius: 20,
     paddingHorizontal: 16,
-    fontSize: 16,
-    marginRight: 12,
+    fontSize: 14,
+    marginRight: 8,
+    backgroundColor: '#fff',
   },
   addButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
   scrollContent: {
-    padding: 16,
+    padding: 12,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -693,26 +820,30 @@ const styles = StyleSheet.create({
     padding: 40,
   },
   emptyText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
-    marginTop: 16,
+    marginTop: 12,
   },
   emptySubtext: {
-    fontSize: 14,
+    fontSize: 12,
     marginTop: 8,
     textAlign: 'center',
+    color: '#6c757d',
   },
   taskCard: {
     flexDirection: 'row',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 16,
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 12,
     borderWidth: 1,
+    borderColor: '#e9ecef',
+    backgroundColor: '#fff',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowRadius: 2,
+    elevation: 1,
   },
   checkboxContainer: {
     marginRight: 12,
@@ -722,9 +853,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   taskTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '500',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   completedTask: {
     textDecorationLine: 'line-through',
@@ -741,10 +872,56 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   taskDetailText: {
-    fontSize: 12,
+    fontSize: 11,
     marginLeft: 4,
+    color: '#6c757d',
   },
   deleteButton: {
-    padding: 8,
+    padding: 4,
+    marginLeft: 8,
+  },
+  filterContainer: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+    backgroundColor: '#fff',
+  },
+  filterTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+    color: '#333',
+  },
+  filterScrollView: {
+    flexDirection: 'row',
+  },
+  filterButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    backgroundColor: '#e9ecef',
+    marginRight: 8,
+  },
+  filterButtonActive: {
+    backgroundColor: '#2E7D32',
+  },
+  filterButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#333',
+  },
+  filterButtonTextActive: {
+    color: '#fff',
+  },
+  prioritySection: {
+    marginBottom: 16,
+  },
+  priorityTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 12,
+    paddingHorizontal: 4,
   },
 });
