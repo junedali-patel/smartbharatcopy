@@ -34,6 +34,8 @@ Notifications.setNotificationHandler({
 });
 
 export default function TasksScreen() {
+  console.log('TasksScreen: Component mounted');
+  
   // Use white background for all layouts
   const backgroundColor = '#ffffff';
   const cardBackground = '#ffffff';
@@ -191,35 +193,70 @@ export default function TasksScreen() {
         const match = command.match(pattern);
         if (match) {
           const taskDescription = match[3] || match[2] || match[1];
-          // Find matching task using improved fuzzy matching
-          const matchingTask = tasks.find(task => {
-            const taskWords = task.title.toLowerCase().split(/\s+/);
-            const descriptionWords = taskDescription.toLowerCase().split(/\s+/);
-            
-            // Check if the task description contains key words from the task title
-            const hasKeyWords = descriptionWords.some(word => 
-              taskWords.some(taskWord => 
-                taskWord.includes(word) || word.includes(taskWord)
-              )
-            );
-
-            // Check if the task title contains key words from the description
-            const hasTitleWords = taskWords.some(word =>
-              descriptionWords.some(descWord =>
-                word.includes(descWord) || descWord.includes(word)
-              )
-            );
-
-            return hasKeyWords || hasTitleWords;
-          });
           
-          if (matchingTask) {
-            // Mark task as completed
+          // Split the description by common conjunctions and phrases to handle multiple tasks
+          // Handle "both X and Y", "X and Y", "X, Y", "X & Y" patterns
+          let taskDescriptions: string[] = [];
+          
+          // Check for "both X and Y" pattern first
+          const bothPattern = /both (.+?) and (.+)/i;
+          const bothMatch = taskDescription.match(bothPattern);
+          if (bothMatch) {
+            taskDescriptions = [bothMatch[1].trim(), bothMatch[2].trim()];
+          } else {
+            // Split by common conjunctions
+            taskDescriptions = taskDescription.split(/\s+(?:and|&|,)\s+/);
+          }
+          
+          const completedTasks: Task[] = [];
+          
+          // Check each task description
+          for (const desc of taskDescriptions) {
+            const trimmedDesc = desc.trim();
+            if (!trimmedDesc) continue;
+            
+            // Find matching task using improved fuzzy matching
+            const matchingTask = tasks.find(task => {
+              const taskWords = task.title.toLowerCase().split(/\s+/);
+              const descriptionWords = trimmedDesc.toLowerCase().split(/\s+/);
+              
+              // Check if the task description contains key words from the task title
+              const hasKeyWords = descriptionWords.some(word => 
+                taskWords.some(taskWord => 
+                  taskWord.includes(word) || word.includes(taskWord)
+                )
+              );
+
+              // Check if the task title contains key words from the description
+              const hasTitleWords = taskWords.some(word =>
+                descriptionWords.some(descWord =>
+                  word.includes(descWord) || descWord.includes(word)
+                )
+              );
+
+              return hasKeyWords || hasTitleWords;
+            });
+            
+            if (matchingTask && !completedTasks.find(t => t.id === matchingTask.id)) {
+              completedTasks.push(matchingTask);
+            }
+          }
+          
+          if (completedTasks.length > 0) {
+            // Mark all matching tasks as completed
             setTasks(tasks.map(task => 
-              task.id === matchingTask.id ? { ...task, completed: true } : task
+              completedTasks.some(completedTask => completedTask.id === task.id) 
+                ? { ...task, completed: true } 
+                : task
             ));
             
-            setAssistantResponse(`Great! I've marked "${matchingTask.title}" as completed.`);
+            if (completedTasks.length === 1) {
+              setAssistantResponse(`Great! I've marked "${completedTasks[0].title}" as completed.`);
+            } else {
+              const taskTitles = completedTasks.map(task => `"${task.title}"`).join(' and ');
+              setAssistantResponse(`Great! I've marked ${taskTitles} as completed.`);
+            }
+            
             await stopListening();
             return;
           }
@@ -323,16 +360,30 @@ export default function TasksScreen() {
         // Parse the JSON response
         const taskData = JSON.parse(cleanJson);
         
-        // Check if a similar task already exists
+        // Check if a similar task already exists - improved similarity detection
         const existingTask = tasks.find(task => {
-          const taskWords = task.title.toLowerCase().split(/\s+/);
-          const newTaskWords = taskData.title.toLowerCase().split(/\s+/);
+          const taskWords = task.title.toLowerCase().split(/\s+/).filter(word => word.length > 2);
+          const newTaskWords = taskData.title.toLowerCase().split(/\s+/).filter(word => word.length > 2);
           
-          return taskWords.some((word: string) => 
+          // Calculate word overlap
+          const commonWords = taskWords.filter((word: string) => 
             newTaskWords.some((newWord: string) => 
-              word.includes(newWord) || newWord.includes(word)
+              word === newWord || 
+              (word.length > 3 && newWord.length > 3 && (word.includes(newWord) || newWord.includes(word)))
             )
           );
+          
+          // Calculate similarity percentage
+          const totalWords = Math.max(taskWords.length, newTaskWords.length);
+          const similarityPercentage = commonWords.length / totalWords;
+          
+          // Consider tasks similar only if they have high word overlap (more than 60% similar words)
+          // AND the tasks are actually about the same activity
+          const isSimilar = similarityPercentage > 0.6 && 
+                           (taskWords.length > 1 && newTaskWords.length > 1) &&
+                           commonWords.length >= 2;
+          
+          return isSimilar;
         });
         
         if (existingTask) {

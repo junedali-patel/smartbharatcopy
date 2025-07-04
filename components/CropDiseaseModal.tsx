@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, ScrollView, ActivityIndicator, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, ScrollView, ActivityIndicator, Alert, Platform, Linking } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -47,7 +47,32 @@ const predictDiseaseFromAPI = async (imageUri: string) => {
 const getGeminiDiseaseInfo = async (diseaseLabel: string) => {
   // Use the provided API key directly (for demonstration, but should be secured in production)
   const apiKey = 'AIzaSyDY1gJQkBzMY02PPePwcFSO_9-uBKf0afs';
-  const prompt = `Write a short summary about the plant disease "${diseaseLabel}", including its cause, solution, and links to more information.`;
+  const prompt = `Write a detailed, structured response about the plant disease "${diseaseLabel}" in exactly this format:
+
+ABOUT:
+[Provide a comprehensive description of the disease, including symptoms, affected plant parts, progression, and impact on plant health and yield]
+
+CAUSE:
+[Explain the causal agents (pathogens, environmental factors), transmission methods, and conditions that favor disease development]
+
+SOLUTION:
+[Provide detailed treatment and prevention methods, including cultural practices, chemical controls, and biological methods. ALWAYS include at least 2 relevant links in format: [Link Text](URL)]
+
+CRITICAL: You MUST include at least 2 disease-specific links in the SOLUTION section. Search for and provide links that are specifically relevant to "${diseaseLabel}". Look for:
+- University extension articles about this specific disease
+- Research papers or studies about this disease
+- Treatment guides specific to this disease
+- Agricultural websites with information about this disease
+- Government agricultural resources about this disease
+
+Do NOT use generic plant disease links. Find specific, relevant sources for "${diseaseLabel}".
+
+Keep responses informative but well-structured. Example:
+ABOUT: This disease affects plant leaves, stems, and sometimes fruits, causing characteristic symptoms that reduce plant vigor and yield. It can spread rapidly under favorable conditions.
+
+CAUSE: Caused by specific pathogens that thrive in certain environmental conditions. Transmission occurs through various vectors and contaminated materials.
+
+SOLUTION: Implement integrated management including cultural practices, chemical treatments, and biological controls. More info: [Specific Disease Research](https://specific-research-url.com) [Treatment Guide for This Disease](https://specific-treatment-url.com)`;
 
   const response = await fetch('https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=' + apiKey, {
     method: 'POST',
@@ -73,7 +98,115 @@ const getGeminiDiseaseInfo = async (diseaseLabel: string) => {
   const data = await response.json();
   // Parse Gemini's response to extract the text
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No information found.';
-  return { summary: text };
+  
+  // Parse the structured response
+  const aboutMatch = text.match(/ABOUT:\s*(.*?)(?=\nCAUSE:|$)/s);
+  const causeMatch = text.match(/CAUSE:\s*(.*?)(?=\nSOLUTION:|$)/s);
+  const solutionMatch = text.match(/SOLUTION:\s*(.*?)(?=\n|$)/s);
+  
+  let solution = solutionMatch ? solutionMatch[1].trim() : 'Information not available.';
+  
+  // Check if solution has links, if not add fallback links
+  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+  const links = solution.match(linkRegex);
+  
+  if (!links || links.length < 2) {
+    // Add disease-specific fallback links based on the disease name
+    const diseaseName = diseaseLabel.toLowerCase();
+    let fallbackLinks = '';
+    
+    if (diseaseName.includes('strawberry')) {
+      fallbackLinks = ' More information: [Strawberry Disease Guide](https://extension.umn.edu/fruit/growing-strawberries-home-garden) [Strawberry Plant Care](https://www.almanac.com/plant/strawberries)';
+    } else if (diseaseName.includes('tomato')) {
+      fallbackLinks = ' More information: [Tomato Disease Guide](https://extension.umn.edu/vegetables/growing-tomatoes) [Tomato Plant Care](https://www.almanac.com/plant/tomatoes)';
+    } else if (diseaseName.includes('corn')) {
+      fallbackLinks = ' More information: [Corn Disease Guide](https://extension.umn.edu/corn/pest-management) [Corn Plant Care](https://www.almanac.com/plant/corn)';
+    } else if (diseaseName.includes('potato')) {
+      fallbackLinks = ' More information: [Potato Disease Guide](https://extension.umn.edu/vegetables/growing-potatoes) [Potato Plant Care](https://www.almanac.com/plant/potatoes)';
+    } else {
+      // Generic but working fallback links
+      fallbackLinks = ' More information: [Plant Disease Guide](https://extension.umn.edu/plant-diseases) [Agricultural Research](https://www.researchgate.net/topic/Plant-Diseases)';
+    }
+    solution += fallbackLinks;
+  }
+  
+  // Validate and clean up any invalid links in the solution
+  solution = solution.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match: string, linkText: string, linkUrl: string) => {
+    // Check if URL is valid (starts with http/https)
+    if (linkUrl && linkUrl.trim().startsWith('http')) {
+      return match; // Keep valid links
+    } else {
+      return linkText; // Remove invalid links, keep just the text
+    }
+  });
+  
+  return {
+    about: aboutMatch ? aboutMatch[1].trim() : 'Information not available.',
+    cause: causeMatch ? causeMatch[1].trim() : 'Information not available.',
+    solution: solution
+  };
+};
+
+// Component to render clickable links
+const LinkText = ({ text }: { text: string }) => {
+  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+  const parts = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = linkRegex.exec(text)) !== null) {
+    // Add text before the link
+    if (match && match.index > lastIndex) {
+      parts.push(
+        <Text key={`text-${lastIndex}`} style={styles.detailText}>
+          {text.slice(lastIndex, match.index)}
+        </Text>
+      );
+    }
+
+    // Add the clickable link - with extra safety checks
+    if (match && match.length >= 3 && match[1] && match[2]) {
+      const linkText = match[1];
+      const linkUrl = match[2];
+      
+      parts.push(
+        <Text
+          key={`link-${match.index}`}
+          style={[styles.detailText, styles.linkText]}
+          onPress={() => {
+            try {
+              if (linkUrl && linkUrl.trim()) {
+                Linking.openURL(linkUrl);
+              } else {
+                Alert.alert('Error', 'Invalid link URL');
+              }
+            } catch (error) {
+              console.error('Error opening link:', error);
+              Alert.alert('Error', 'Could not open the link');
+            }
+          }}
+        >
+          {linkText}
+        </Text>
+      );
+
+      lastIndex = match.index + match[0].length;
+    } else {
+      // If match is invalid, skip it and continue
+      lastIndex = match.index + (match[0] ? match[0].length : 1);
+    }
+  }
+
+  // Add remaining text
+  if (lastIndex < text.length) {
+    parts.push(
+      <Text key={`text-${lastIndex}`} style={styles.detailText}>
+        {text.slice(lastIndex)}
+      </Text>
+    );
+  }
+
+  return <Text>{parts}</Text>;
 };
 
 export default function CropDiseaseModal({ visible, onClose }: CropDiseaseModalProps) {
@@ -208,7 +341,17 @@ export default function CropDiseaseModal({ visible, onClose }: CropDiseaseModalP
 
                       <View style={styles.detailSection}>
                         <Text style={styles.sectionTitle}>About the Disease</Text>
-                        <Text style={styles.detailText}>{report.summary}</Text>
+                        <Text style={styles.detailText}>{report.about}</Text>
+                      </View>
+
+                      <View style={styles.detailSection}>
+                        <Text style={styles.sectionTitle}>Cause</Text>
+                        <Text style={styles.detailText}>{report.cause}</Text>
+                      </View>
+
+                      <View style={styles.detailSection}>
+                        <Text style={styles.sectionTitle}>Solution</Text>
+                        <LinkText text={report.solution} />
                       </View>
                     </View>
                   )
@@ -287,6 +430,8 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 10,
     marginBottom: 20,
+    resizeMode: 'contain',
+    aspectRatio: 1,
   },
   loadingContainer: {
     alignItems: 'center',
@@ -332,5 +477,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 20,
+  },
+  linkText: {
+    color: '#2E7D32',
+    textDecorationLine: 'underline',
   },
 });

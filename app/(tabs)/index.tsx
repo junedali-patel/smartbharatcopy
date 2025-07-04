@@ -67,12 +67,48 @@ const NewsSection = () => {
     const fetchNews = async () => {
       try {
         const apiKey = '0ba0ad111fe34dab9d1827fbf12428b3';
+        // Updated query to get agriculture-related news from India
         const response = await fetch(
-          `https://newsapi.org/v2/everything?q=farming&language=en&sortBy=publishedAt&apiKey=${apiKey}`
+          `https://newsapi.org/v2/everything?q=agriculture farming india&language=en&sortBy=publishedAt&pageSize=7&apiKey=${apiKey}`
         );
         const data = await response.json();
         if (data.articles) {
-          setNews(data.articles.slice(0, 7)); // Get top 3 news items
+          // Filter for agriculture-related news and Indian sources
+          const filteredNews = data.articles.filter((article: any) => {
+            const title = article.title?.toLowerCase() || '';
+            const description = article.description?.toLowerCase() || '';
+            const content = article.content?.toLowerCase() || '';
+            
+            // Keywords related to agriculture and farming
+            const agricultureKeywords = [
+              'agriculture', 'farming', 'farmer', 'crop', 'harvest', 'irrigation',
+              'fertilizer', 'pesticide', 'soil', 'seed', 'agricultural', 'kisan',
+              'krishi', 'mandi', 'yojana', 'scheme', 'subsidy', 'loan', 'pm kisan',
+              'agricultural policy', 'rural development', 'farm', 'plantation'
+            ];
+            
+            // Check if article contains agriculture-related keywords
+            const hasAgricultureContent = agricultureKeywords.some(keyword => 
+              title.includes(keyword) || description.includes(keyword) || content.includes(keyword)
+            );
+            
+            // Check if source is from India (common Indian news sources)
+            const indianSources = [
+              'timesofindia', 'hindustantimes', 'thehindu', 'indianexpress',
+              'ndtv', 'zeenews', 'news18', 'moneycontrol', 'livemint',
+              'business-standard', 'financialexpress', 'economic times'
+            ];
+            
+            const source = article.source?.name?.toLowerCase() || '';
+            const url = article.url?.toLowerCase() || '';
+            const isIndianSource = indianSources.some(indianSource => 
+              source.includes(indianSource) || url.includes(indianSource)
+            );
+            
+            return hasAgricultureContent || isIndianSource;
+          });
+          
+          setNews(filteredNews.slice(0, 7)); // Get top 7 filtered news items
         }
       } catch (error) {
         console.error('Error fetching news:', error);

@@ -72,30 +72,55 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    console.log('ProfileScreen: Component mounted');
     fetchUserProfile();
   }, []);
 
   const fetchUserProfile = async () => {
     try {
+      console.log('ProfileScreen: Fetching user profile...');
       if (!auth.currentUser) {
-        router.replace('/(auth)/login');
+        console.log('ProfileScreen: No current user, redirecting to login');
+        router.replace('/auth/login');
         return;
       }
 
+      console.log('ProfileScreen: Current user found:', auth.currentUser.uid);
       const userRef = doc(db, 'users', auth.currentUser.uid);
       const docSnap = await getDoc(userRef);
 
       if (docSnap.exists()) {
+        console.log('ProfileScreen: User profile found in Firestore');
         const data = docSnap.data() as UserProfile;
         setProfile({
           ...data,
           interests: Array.isArray(data.interests) ? data.interests : []
         });
+      } else {
+        console.log('ProfileScreen: No user profile found, creating default profile');
+        // Create a default profile if none exists
+        const defaultProfile: UserProfile = {
+          name: auth.currentUser.displayName || '',
+          email: auth.currentUser.email || '',
+          phone: '',
+          address: '',
+          city: '',
+          state: '',
+          pincode: '',
+          occupation: '',
+          interests: [],
+          avatarUrl: '',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        setProfile(defaultProfile);
       }
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      console.error('ProfileScreen: Error fetching profile:', error);
+      setError('Failed to load profile data');
       Alert.alert('Error', 'Failed to load profile data');
     } finally {
       setLoading(false);
@@ -105,7 +130,7 @@ export default function ProfileScreen() {
   const handleSignOut = async () => {
     try {
       await auth.signOut();
-      router.replace('/(auth)/login');
+      router.replace('/auth/login');
     } catch (error) {
       console.error('Error signing out:', error);
       Alert.alert('Error', 'Failed to sign out');
@@ -181,7 +206,27 @@ export default function ProfileScreen() {
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor }]}>
-        <ActivityIndicator size="large" color={accentColor} />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={accentColor} />
+          <Text style={[styles.loadingText, { color: textColor }]}>Loading profile...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor }]}>
+        <View style={styles.errorContainer}>
+          <FontAwesome name="exclamation-triangle" size={48} color="#e53935" />
+          <Text style={[styles.errorText, { color: textColor }]}>{error}</Text>
+          <TouchableOpacity
+            style={[styles.retryButton, { backgroundColor: accentColor }]}
+            onPress={fetchUserProfile}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
     );
   }
@@ -573,5 +618,36 @@ const styles = StyleSheet.create({
   settingText: {
     fontSize: 16,
     marginLeft: 12,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 16,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 16,
+  },
+  retryButton: {
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

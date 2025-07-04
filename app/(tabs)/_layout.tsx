@@ -21,25 +21,43 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          tabBarIcon: ({ color }: { color: string }) => <FontAwesome name="home" size={16} color="#333333" />,
+          title: 'Home',
+          tabBarIcon: ({ color }: { color: string }) => <FontAwesome name="home" size={20} color="#333333" />,
         }}
       />
       <Tabs.Screen
         name="schemes"
         options={{
-          tabBarIcon: ({ color }: { color: string }) => <FontAwesome name="list" size={24} color={color} />,
+          title: 'Schemes',
+          tabBarIcon: ({ color }: { color: string }) => <FontAwesome name="list" size={20} color="#333333" />,
         }}
       />
       <Tabs.Screen
         name="explore"
         options={{
-          tabBarIcon: ({ color }: { color: string }) => <FontAwesome name="compass" size={24} color={color} />,
+          title: 'Explore',
+          tabBarIcon: ({ color }: { color: string }) => <FontAwesome name="compass" size={20} color="#333333" />,
+        }}
+      />
+      <Tabs.Screen
+        name="tasks"
+        options={{
+          title: 'Tasks',
+          tabBarIcon: ({ color }: { color: string }) => <FontAwesome name="tasks" size={20} color="#333333" />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          tabBarIcon: ({ color }: { color: string }) => <FontAwesome name="user" size={24} color={color} />,
+          title: 'Profile',
+          tabBarIcon: ({ color }: { color: string }) => <FontAwesome name="user" size={20} color="#333333" />,
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: 'Settings',
+          tabBarIcon: ({ color }: { color: string }) => <FontAwesome name="cog" size={20} color="#333333" />,
         }}
       />
     </Tabs>
