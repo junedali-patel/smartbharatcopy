@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, ScrollView, ActivityIndicator, Alert, Platform } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -8,29 +8,72 @@ interface CropDiseaseModalProps {
   onClose: () => void;
 }
 
-// Mock function to simulate ML model prediction
-const simulatePrediction = async (imageUri: string) => {
-  return new Promise(resolve => {
-    setTimeout(() => {
-      resolve({
-        disease: 'Tomato - Late Blight',
-        confidence: 0.92,
-      });
-    }, 2000);
+// Real function to send image to TFLite model API
+const predictDiseaseFromAPI = async (imageUri: string) => {
+  const formData = new FormData();
+  
+  // Check if we're on web or mobile
+  if (Platform.OS === 'web') {
+    // For web, we need to get the actual File object
+    // This assumes you have an input element with id="fileInput"
+    const fileInput = document.getElementById('fileInput') as HTMLInputElement;
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+      formData.append('file', fileInput.files[0]);
+    } else {
+      throw new Error('No file selected for web platform');
+    }
+  } else {
+    // For React Native (mobile/emulator)
+    formData.append('file', {
+      uri: imageUri,
+      name: 'photo.jpg',
+      type: 'image/jpeg',
+    } as any);
+  }
+
+  const response = await fetch('https://plant-disease-api-587210488178.us-central1.run.app/predict', {
+    method: 'POST',
+    body: formData,
+    // Do NOT set headers here! Let the environment set Content-Type
   });
+
+  if (!response.ok) {
+    throw new Error('Failed to get prediction from model API');
+  }
+  return await response.json(); // { label: 'Disease Name' }
 };
 
-// Mock function to simulate Gemini report generation
-const generateGeminiReport = async (disease: string) => {
-  return new Promise(resolve => {
-    setTimeout(() => {
-      resolve({
-        precaution: 'Remove and destroy infected plants. Avoid overhead watering, especially late in the day. Ensure good air circulation around plants.',
-        fertilizer: 'Apply a balanced fertilizer with lower nitrogen and higher potassium and phosphorus. Cal-Mag supplement can also be beneficial.',
-        care: 'Monitor plants regularly for signs of disease. Use copper-based fungicides as a preventive measure before the disease appears.',
-      });
-    }, 2000);
+// Real function to get info from Gemini AI
+const getGeminiDiseaseInfo = async (diseaseLabel: string) => {
+  // Use the provided API key directly (for demonstration, but should be secured in production)
+  const apiKey = 'AIzaSyDY1gJQkBzMY02PPePwcFSO_9-uBKf0afs';
+  const prompt = `Write a short summary about the plant disease "${diseaseLabel}", including its cause, solution, and links to more information.`;
+
+  const response = await fetch('https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=' + apiKey, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [
+            { text: prompt }
+          ]
+        }
+      ]
+    }),
   });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('Gemini API error:', errorText);
+    throw new Error('Failed to get info from Gemini AI: ' + errorText);
+  }
+  const data = await response.json();
+  // Parse Gemini's response to extract the text
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No information found.';
+  return { summary: text };
 };
 
 export default function CropDiseaseModal({ visible, onClose }: CropDiseaseModalProps) {
@@ -40,34 +83,63 @@ export default function CropDiseaseModal({ visible, onClose }: CropDiseaseModalP
   const [isLoading, setIsLoading] = useState(false);
 
   const handleImagePicker = async (useCamera: boolean) => {
-    const { status } = useCamera
-      ? await ImagePicker.requestCameraPermissionsAsync()
-      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (Platform.OS === 'web') {
+      // For web, trigger the hidden file input
+      const fileInput = document.getElementById('fileInput') as HTMLInputElement;
+      if (fileInput) {
+        fileInput.click();
+      }
+    } else {
+      // For React Native (mobile/emulator)
+      const { status } = useCamera
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
 
-    if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'Sorry, we need camera roll permissions to make this work!');
-      return;
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Sorry, we need camera roll permissions to make this work!');
+        return;
+      }
+
+      const result = useCamera
+        ? await ImagePicker.launchCameraAsync({ quality: 1 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 1 });
+
+      if (!result.canceled) {
+        setImage(result.assets[0].uri);
+        setPrediction(null);
+        setReport(null);
+        handlePrediction(result.assets[0].uri);
+      }
     }
+  };
 
-    const result = useCamera
-      ? await ImagePicker.launchCameraAsync({ quality: 1 })
-      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 1 });
-
-    if (!result.canceled) {
-      setImage(result.assets[0].uri);
+  // Handle file selection for web
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const imageUrl = URL.createObjectURL(file);
+      setImage(imageUrl);
       setPrediction(null);
       setReport(null);
-      handlePrediction(result.assets[0].uri);
+      handlePrediction(imageUrl);
     }
   };
 
   const handlePrediction = async (imageUri: string) => {
     setIsLoading(true);
-    const predResult: any = await simulatePrediction(imageUri);
-    setPrediction(predResult);
+    try {
+      const predResult: any = await predictDiseaseFromAPI(imageUri);
+      setPrediction({ disease: predResult.label, confidence: 1 }); // API does not return confidence
 
-    const reportResult = await generateGeminiReport(predResult.disease);
-    setReport(reportResult);
+      const reportResult = await getGeminiDiseaseInfo(predResult.label);
+      setReport(reportResult);
+    } catch (error) {
+      let message = 'Prediction failed.';
+      if (typeof error === 'object' && error !== null && 'message' in error) {
+        message = (error as any).message;
+      }
+      Alert.alert('Error', message);
+    }
     setIsLoading(false);
   };
 
@@ -85,6 +157,17 @@ export default function CropDiseaseModal({ visible, onClose }: CropDiseaseModalP
       visible={visible}
       onRequestClose={resetModal}
     >
+      {/* Hidden file input for web */}
+      {Platform.OS === 'web' && (
+        <input
+          id="fileInput"
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={handleFileSelect}
+        />
+      )}
+      
       <View style={styles.modalContainer}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
@@ -124,18 +207,8 @@ export default function CropDiseaseModal({ visible, onClose }: CropDiseaseModalP
                       </View>
 
                       <View style={styles.detailSection}>
-                        <Text style={styles.sectionTitle}>Precaution</Text>
-                        <Text style={styles.detailText}>{report.precaution}</Text>
-                      </View>
-
-                      <View style={styles.detailSection}>
-                        <Text style={styles.sectionTitle}>Fertilizer Recommendation</Text>
-                        <Text style={styles.detailText}>{report.fertilizer}</Text>
-                      </View>
-
-                      <View style={styles.detailSection}>
-                        <Text style={styles.sectionTitle}>Care Instructions</Text>
-                        <Text style={styles.detailText}>{report.care}</Text>
+                        <Text style={styles.sectionTitle}>About the Disease</Text>
+                        <Text style={styles.detailText}>{report.summary}</Text>
                       </View>
                     </View>
                   )
