@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Image, ActivityIndicator, Modal, Alert, Linking } from 'react-native';
 import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { useThemeColor } from '../../hooks/useThemeColor';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { db } from '../../services/firebase';
-import { collection, getDocs } from 'firebase/firestore';
-import { router } from 'expo-router';
+import schemesData from '../../constants/schemes.json';
+import { router, useLocalSearchParams } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GEMINI_API_KEY, isGeminiAvailable } from '../../constants/config';
@@ -39,6 +38,14 @@ export default function SchemesScreen() {
   const [categories, setCategories] = useState<string[]>(['All']);
   const [selectedScheme, setSelectedScheme] = useState<Scheme | null>(null);
   const [isDetailsModalVisible, setIsDetailsModalVisible] = useState(false);
+  
+  // Get parameters from navigation
+  const params = useLocalSearchParams();
+  const detectedSchemeId = params.schemeId as string;
+  const detectedSchemeName = params.schemeName as string;
+  
+  // Ref for scroll view
+  const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     fetchSchemes();
@@ -47,22 +54,17 @@ export default function SchemesScreen() {
   const fetchSchemes = async () => {
     try {
       setLoading(true);
-      const schemesCollection = collection(db, 'schemes');
-      const schemesSnapshot = await getDocs(schemesCollection);
-      const schemesList = schemesSnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          name: data.title || 'Government Scheme',
-          description: data.description || 'No description available',
-          benefits: Array.isArray(data.benefits) ? data.benefits : [],
-          eligibility: data.criteria ? [data.criteria] : [],
-          documents: Array.isArray(data.documents) ? data.documents : [],
-          category: data.category || 'Other',
-          status: data.status || 'Active',
-          applyLink: data.applyLink || ''
-        } as Scheme;
-      });
+      const schemesList = schemesData.map(scheme => ({
+        id: scheme.id,
+        name: scheme.title,
+        description: scheme.description,
+        benefits: [], // Will be populated by Gemini if needed
+        eligibility: scheme.criteria ? [scheme.criteria] : [],
+        documents: [], // Will be populated by Gemini if needed
+        category: scheme.category,
+        status: 'Active',
+        applyLink: scheme.applyLink
+      } as Scheme));
 
       // Extract unique categories
       const uniqueCategories = ['All', ...new Set(schemesList.map(scheme => scheme.category))];
@@ -78,6 +80,31 @@ export default function SchemesScreen() {
   const filteredSchemes = selectedCategory === 'All' 
     ? schemes 
     : schemes.filter(scheme => scheme.category === selectedCategory);
+
+  // Handle detected scheme from chatbot
+  useEffect(() => {
+    if (detectedSchemeId && schemes.length > 0) {
+      const detectedScheme = schemes.find(scheme => scheme.id === detectedSchemeId);
+      if (detectedScheme) {
+        // Find the index of the scheme in the filtered list
+        const schemeIndex = filteredSchemes.findIndex(scheme => scheme.id === detectedSchemeId);
+        if (schemeIndex !== -1) {
+          // Scroll to the scheme after a short delay
+          setTimeout(() => {
+            scrollViewRef.current?.scrollTo({
+              y: schemeIndex * 200, // Approximate height of each card
+              animated: true
+            });
+            
+            // Auto-open the details modal after scrolling
+            setTimeout(() => {
+              handleViewDetails(detectedScheme);
+            }, 500);
+          }, 1000);
+        }
+      }
+    }
+  }, [detectedSchemeId, schemes, filteredSchemes]);
 
   const getCategoryIcon = (category: string) => {
     switch (category.toLowerCase()) {
@@ -292,7 +319,10 @@ export default function SchemesScreen() {
       </View>
 
       {/* Schemes List */}
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        ref={scrollViewRef}
+        contentContainerStyle={styles.scrollContent}
+      >
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={accentColor} />
@@ -303,7 +333,17 @@ export default function SchemesScreen() {
           </View>
         ) : (
           filteredSchemes.map((scheme) => (
-            <View key={scheme.id} style={[styles.card, { backgroundColor: cardBackground, borderColor }]}>
+            <View 
+              key={scheme.id} 
+              style={[
+                styles.card, 
+                { 
+                  backgroundColor: cardBackground, 
+                  borderColor: scheme.id === detectedSchemeId ? accentColor : borderColor,
+                  borderWidth: scheme.id === detectedSchemeId ? 2 : 1
+                }
+              ]}
+            >
               <View style={styles.cardHeader}>
                 <View style={styles.titleContainer}>
                   <View style={[styles.iconContainer, { backgroundColor: accentColor + '20' }]}>

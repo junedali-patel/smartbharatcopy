@@ -12,6 +12,8 @@ import { db } from '../../config/firebase'; // Import db from firebase config
 import VoiceService from '../../services/VoiceService';
 import { GEMINI_API_KEY, isGeminiAvailable } from '../../constants/config';
 import CropDiseaseModal from '../../components/CropDiseaseModal';
+import TaskService, { Task } from '../../services/taskService';
+import SchemeService from '../../services/schemeService';
 
 type TabRoute = '/' | '/schemes' | '/explore' | '/tasks' | '/profile';
 
@@ -206,10 +208,13 @@ export default function HomeScreen() {
   const [selectedLanguage, setSelectedLanguage] = useState('hindi');
   const [showLanguageSelector, setShowLanguageSelector] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [hasIntroduced, setHasIntroduced] = useState(false);
+  const taskService = TaskService.getInstance(); // Initialize task service
 
   const languages = [
     { code: 'hindi', name: 'हिंदी', greeting: 'नमस्ते' },
     { code: 'english', name: 'English', greeting: 'Hello' },
+    { code: 'kannada', name: 'ಕನ್ನಡ', greeting: 'ನಮಸ್ಕಾರ' },
     { code: 'punjabi', name: 'ਪੰਜਾਬੀ', greeting: 'ਸਤ ਸ੍ਰੀ ਅਕਾਲ' },
     { code: 'marathi', name: 'मराठी', greeting: 'नमस्कार' },
     { code: 'gujarati', name: 'ગુજરાતી', greeting: 'નમસ્તે' },
@@ -276,6 +281,8 @@ export default function HomeScreen() {
       } else {
         setTranscript('');
         setCurrentTranscript('');
+        // Set language for voice recognition
+        voiceService.current?.setLanguage(selectedLanguage);
         await voiceService.current?.startListening();
         setIsListening(true);
       }
@@ -283,6 +290,18 @@ export default function HomeScreen() {
       console.error('Error toggling voice input:', error);
       setError('Failed to access microphone. Please check permissions.');
       setIsListening(false);
+    }
+  };
+
+  // Add manual stop function
+  const handleStopRecording = async () => {
+    try {
+      if (isListening) {
+        await voiceService.current?.stopListening();
+        setIsListening(false);
+      }
+    } catch (error) {
+      console.error('Error stopping recording:', error);
     }
   };
 
@@ -315,6 +334,14 @@ export default function HomeScreen() {
         throw new Error('Gemini API is not available');
       }
 
+      // Check if this is a greeting and if we've already introduced
+      const isGreeting = /^(नमस्ते|hello|hi|namaste|नमस्कार|ਸਤ ਸ੍ਰੀ ਅਕਾਲ|નમસ્તે|নমস্কার|ನಮಸ್ಕಾರ)/i.test(prompt.trim());
+      
+      // Set introduction flag if this is the first greeting
+      if (isGreeting && !hasIntroduced) {
+        setHasIntroduced(true);
+      }
+
       const model = genAI.getGenerativeModel({ 
         model: "gemini-1.5-flash",
         systemInstruction: `You are a friendly and knowledgeable agricultural assistant for Smart Bharat, designed to help Indian farmers. Your responses should be:
@@ -332,12 +359,20 @@ export default function HomeScreen() {
 11. CRITICAL: Remember the last topic discussed and maintain context throughout the conversation
 12. For ANY follow-up question, first understand what specific aspect of the previous topic is being asked about
 
+Task Handling Rules:
+- If the user's message is a request to add a task, reminder, or todo (in any language), respond ONLY with __TASK__: followed by a clear, concise, and actionable task description in the same language as the user's message.
+- Do NOT add any extra text, greetings, or explanations. Only output __TASK__: and the task description.
+- The task description should be ready to be added to a task manager (e.g., "Water the crops tomorrow morning", "खेत में खाद डालना है", etc.)
+- If the user's message is NOT a task, respond normally as per the other instructions.
+
 Introduction Rules:
-- When user greets for the first time (like "namaste", "hello", etc.), ALWAYS introduce yourself
+- ONLY introduce yourself on the VERY FIRST greeting of the conversation
+- If user has already greeted you before in this conversation, DO NOT introduce yourself again
+- If the conversation has history, continue naturally without introduction
 - Introduction should be in the selected language
 - Keep introduction short and clear
 - Include your name (Smart Bharat) and main purpose
-- Example introductions:
+- Example introductions (ONLY for first greeting):
   ${selectedLanguage === 'hindi' ? `
   Hindi: "नमस्ते! मैं स्मार्ट भारत हूं, आपका कृषि सहायक। मैं किसानों को खेती, योजनाओं और कृषि से जुड़ी जानकारी देने में मदद करता हूं।"` : ''}
   ${selectedLanguage === 'marathi' ? `
@@ -345,11 +380,13 @@ Introduction Rules:
   ${selectedLanguage === 'punjabi' ? `
   Punjabi: "ਸਤ ਸ੍ਰੀ ਅਕਾਲ! ਮੈਂ ਸਮਾਰਟ ਭਾਰਤ ਹਾਂ, ਤੁਹਾਡਾ ਖੇਤੀਬਾੜੀ ਸਹਾਇਕ. ਮੈਂ ਕਿਸਾਨਾਂ ਨੂੰ ਖੇਤੀਬਾੜੀ, ਯੋਜਨਾਵਾਂ ਅਤੇ ਖੇਤੀਬਾੜੀ ਸੰਬੰਧੀ ਜਾਣਕਾਰੀ ਦੇਣ ਵਿੱਚ ਮਦਦ ਕਰਦਾ ਹਾਂ."` : ''}
   ${selectedLanguage === 'gujarati' ? `
-  Gujarati: "નમસ્તે! હું સ્માર્ટ ભારત છું, તમારો કૃષિ સહાયક. હું ખેડૂતોને ખેતી, યોજનાઓ અને કૃષિ સંબંધિત માહિતી આપવામાં મદદ કરું છું."` : ''}
+  Gujarati: "નમસ્તે! હું સ્માર્ટ ભારત છું, તમારો કૃષિ સહાયક. હું ખેડૂતોને ખેતી, યોજનાઓ અને કૃષિ સંબંધિત માહિતી આપવામાં મદਦ કરું છું."` : ''}
   ${selectedLanguage === 'bengali' ? `
   Bengali: "নমস্কার! আমি স্মার্ট ভারত, আপনার কৃষি সহায়ক. আমি কৃষকদের কৃষি, প্রকল্প এবং কৃষি সম্পর্কিত তথ্য প্রদান করতে সাহায্য করি."` : ''}
   ${selectedLanguage === 'english' ? `
   English: "Hello! I am Smart Bharat, your agricultural assistant. I help farmers with farming, schemes, and agricultural information."` : ''}
+  ${selectedLanguage === 'kannada' ? `
+  Kannada: "ನಮಸ್ಕಾರ! ನಾನು ಸ್ಮಾರ್ಟ್ ಭಾರತ, ನಿಮ್ಮ ಕೃಷಿ ಸಹಾಯಕ. ನಾನು ರೈತರಿಗೆ ಕೃಷಿ, ಯೋಜನೆಗಳು ಮತ್ತು ಕೃಷಿ ಸಂಬಂಧಿತ ಮಾಹಿತಿಯನ್ನು ನೀಡಲು ಸಹಾಯ ಮಾಡುತ್ತೇನೆ."` : ''}
 
 Context Retention Rules:
 - CRITICAL: ALWAYS maintain context from the previous message
@@ -361,6 +398,9 @@ Context Retention Rules:
 - For ANY topic, remember the last discussed aspect and provide relevant follow-up information
 - NEVER ask for clarification about the previous topic unless absolutely necessary
 - ALWAYS assume the follow-up question is about the last discussed topic
+- If user mentions their location (like "मैं कोल्हापुर में रहता हूं"), remember this context
+- If user asks about specific crops (like "सोयाबीन"), continue discussing that crop
+- If user mentions weather conditions, relate it to farming advice
 
 Language Rules:
 - CRITICAL: You MUST respond in ${selectedLanguage.toUpperCase()} ONLY
@@ -414,6 +454,13 @@ For English:
 - Use English currency symbol ($)
 - Use English greetings (Hello, Hi)
 - Use English punctuation` : ''}
+${selectedLanguage === 'kannada' ? `
+For Kannada:
+- Use proper Kannada grammar and vocabulary
+- Use Kannada numerals (೧, ೨, ೩)
+- Use Kannada currency symbol (₹)
+- Use Kannada greetings (ನಮಸ್ಕಾರ, ರಾಮ ರಾಮ)
+- Use Kannada punctuation` : ''}
 
 Tone Instructions:
 Conciseness: Respond in short, informative sentences.
@@ -451,6 +498,52 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
         parts: [{ text: response }]
       };
       setChatHistory((prev: ChatMessage[]) => [...prev, modelMessage]);
+
+      // Check for scheme detection in user message
+      const detectedScheme = SchemeService.detectScheme(prompt);
+      if (detectedScheme) {
+        const schemeMessages = {
+          hindi: `मैंने "${detectedScheme.title}" योजना का पता लगाया है। मैं आपको योजनाओं टैब में ले जा रहा हूं।`,
+          english: `I detected the "${detectedScheme.title}" scheme. I will direct you to it in the Schemes tab.`,
+          kannada: `ನಾನು "${detectedScheme.title}" ಯೋಜನೆಯನ್ನು ಪತ್ತೆ ಮಾಡಿದ್ದೇನೆ. ನಾನು ನಿಮ್ಮನ್ನು ಯೋಜನೆಗಳ ಟ್ಯಾಬ್‌ನಲ್ಲಿ ಅದಕ್ಕೆ ನಿರ್ದೇಶಿಸುತ್ತೇನೆ.`,
+          marathi: `मी "${detectedScheme.title}" योजना शोधली आहे. मी तुम्हाला योजना टॅबमध्ये त्याकडे निर्देश करतो.`,
+          punjabi: `ਮੈਂ "${detectedScheme.title}" ਯੋਜਨਾ ਦਾ ਪਤਾ ਲਗਾਇਆ ਹੈ. ਮੈਂ ਤੁਹਾਨੂੰ ਯੋਜਨਾਵਾਂ ਟੈਬ ਵਿੱਚ ਇਸ ਵੱਲ ਨਿਰਦੇਸ਼ ਕਰਾਂਗਾ.`,
+          gujarati: `મેં "${detectedScheme.title}" યોજના શોધી છે. હું તમને યોજનાઓ ટેબમાં તેની તરફ નિર્દેશ કરીશ.`,
+          bengali: `আমি "${detectedScheme.title}" প্রকল্পটি সনাক্ত করেছি। আমি আপনাকে প্রকল্প ট্যাবে এটি দেখাতে নিয়ে যাব।`
+        };
+        
+        const response = schemeMessages[selectedLanguage as keyof typeof schemeMessages] || schemeMessages.english;
+        
+        // Navigate to schemes tab with the detected scheme ID after speech completes
+        setTimeout(() => {
+          router.push({
+            pathname: '/schemes',
+            params: { 
+              schemeId: detectedScheme.id,
+              schemeName: detectedScheme.title 
+            }
+          });
+        }, 3000); // Increased delay to allow speech to complete
+        
+        return response;
+      }
+
+      // If Gemini response is a task marker, add the task and show confirmation
+      if (response.trim().startsWith('__TASK__:')) {
+        const taskText = response.replace(/^__TASK__:/, '').trim();
+        const taskData = taskService.parseTaskFromText(taskText);
+        const newTask = await taskService.addTask(taskData);
+        const confirmationMessages = {
+          hindi: `टास्क जोड़ दिया गया है: "${newTask.title}"। आप इसे टास्क टैब में देख सकते हैं।`,
+          english: `Task added: "${newTask.title}". You can view it in the Tasks tab.`,
+          kannada: `ಟಾಸ್ಕ್ ಸೇರಿಸಲಾಗಿದೆ: "${newTask.title}". ನೀವು ಅದನ್ನು ಟಾಸ್ಕ್ ಟ್ಯಾಬ್‌ನಲ್ಲಿ ನೋಡಬಹುದು.`,
+          marathi: `कार्य जोडले आहे: "${newTask.title}". तुम्ही ते कार्य टॅबमध्ये पाहू शकता.`,
+          punjabi: `ਟਾਸਕ ਜੋੜਿਆ ਗਿਆ ਹੈ: "${newTask.title}". ਤੁਸੀਂ ਇਸਨੂੰ ਟਾਸਕ ਟੈਬ ਵਿੱਚ ਦੇਖ ਸਕਦੇ ਹੋ.`,
+          gujarati: `કાર્ય ઉમેર્યું છે: "${newTask.title}". તમે તેને કાર્ય ટેબમાં જોઈ શકો છો.`,
+          bengali: `কাজ যোগ করা হয়েছে: "${newTask.title}". আপনি এটি কাজ ট্যাবে দেখতে পারেন.`
+        };
+        return confirmationMessages[selectedLanguage as keyof typeof confirmationMessages] || confirmationMessages.english;
+      }
 
       return response;
     } catch (error) {
@@ -601,7 +694,39 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
   const clearChat = () => {
     setChatHistory([]);
     setAssistantResponse('');
+    setHasIntroduced(false); // Reset introduction state
   };
+
+  // Debug function to check available voices
+  const checkAvailableVoices = () => {
+    if (voiceService.current) {
+      // Get TTS information
+      const ttsInfo = voiceService.current.getTTSInfo();
+      
+      // Get detailed voice information
+      const voiceInfo = voiceService.current.getVoiceInfo();
+      
+      const voices = voiceService.current.getAvailableVoices();
+      console.log('Available voices:', voices.map(v => `${v.name} (${v.lang})`));
+      
+      const supportedLanguages = ['en-US', 'hi-IN', 'kn-IN', 'ta-IN', 'te-IN', 'ml-IN', 'bn-IN', 'pa-IN', 'mr-IN', 'gu-IN'];
+      supportedLanguages.forEach(lang => {
+        const isSupported = voiceService.current?.isLanguageSupported(lang);
+        console.log(`${lang} supported:`, isSupported);
+      });
+
+    
+    }
+  };
+
+  useEffect(() => {
+    // Check available voices after a delay to ensure speech synthesis is loaded
+    const timer = setTimeout(() => {
+      checkAvailableVoices();
+    }, 1000);
+    
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor }]}>
@@ -693,6 +818,100 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
 
         {/* News Section */}
         <NewsSection />
+
+        {/* Language Selector */}
+        <View style={styles.languageContainer}>
+          <Text style={[styles.languageTitle, { color: textColor }]}>Select Language</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.languageScroll}>
+            {languages.map((lang) => (
+              <TouchableOpacity
+                key={lang.code}
+                style={[
+                  styles.languageButton,
+                  { backgroundColor: selectedLanguage === lang.code ? accentColor : cardBackground },
+                  { borderColor }
+                ]}
+                onPress={() => setSelectedLanguage(lang.code)}
+              >
+                <Text style={[
+                  styles.languageText,
+                  { color: selectedLanguage === lang.code ? '#fff' : textColor }
+                ]}>
+                  {lang.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          
+          {/* Test Kannada Button */}
+          <TouchableOpacity
+            style={[styles.testButton, { backgroundColor: accentColor }]}
+            onPress={() => voiceService.current?.testKannadaSpeech('ನಮಸ್ಕಾರ! ನಾನು ಸ್ಮಾರ್ಟ್ ಭಾರತ')}
+          >
+            <Text style={styles.testButtonText}>Test Kannada (Hindi Voice)</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Voice Input Section */}
+        <View style={styles.voiceSection}>
+          <View style={styles.voiceControls}>
+            <TouchableOpacity
+              style={[
+                styles.voiceButton,
+                { backgroundColor: isListening ? '#ff4444' : accentColor }
+              ]}
+              onPress={handleMicPress}
+            >
+              <FontAwesome 
+                name={isListening ? "stop" : "microphone"} 
+                size={24} 
+                color="white" 
+              />
+            </TouchableOpacity>
+            
+            {isListening && (
+              <TouchableOpacity
+                style={[styles.stopButton, { backgroundColor: '#ff4444' }]}
+                onPress={handleStopRecording}
+              >
+                <Text style={styles.stopButtonText}>Stop</Text>
+              </TouchableOpacity>
+            )}
+            
+            <TouchableOpacity
+              style={[
+                styles.muteButton,
+                { backgroundColor: isMuted ? '#666' : accentColor }
+              ]}
+              onPress={toggleMute}
+            >
+              <FontAwesome 
+                name={isMuted ? "volume-off" : "volume-up"} 
+                size={20} 
+                color="white" 
+              />
+            </TouchableOpacity>
+          </View>
+          
+          {isListening && (
+            <View style={styles.recordingIndicator}>
+              <Text style={[styles.recordingText, { color: accentColor }]}>
+                🎤 Recording... Speak now
+              </Text>
+            </View>
+          )}
+          
+          {transcript && (
+            <View style={styles.transcriptContainer}>
+              <Text style={[styles.transcriptLabel, { color: textColor }]}>
+                You said:
+              </Text>
+              <Text style={[styles.transcriptText, { color: textColor }]}>
+                {transcript}
+              </Text>
+            </View>
+          )}
+        </View>
       </ScrollView>
 
       {/* Weather Details Modal */}
@@ -1091,41 +1310,54 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderTopWidth: 1,
   },
-  voiceButton: {
-    height: 40,
-    width: 40,
-    borderRadius: 100,
-    borderWidth: 0,
-    marginLeft: 12,
-    backgroundColor: '#3d88f9',
-    justifyContent: 'center',
+  voiceControls: {
+    flexDirection: 'row',
     alignItems: 'center',
-    ...Platform.select({
-      web: {
-        boxShadow: 'rgba(0, 0, 0, 0.24) 0px 3px 8px',
-      },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.24,
-        shadowRadius: 8,
-        elevation: 5,
-      },
-    }),
+    gap: 16,
+  },
+  voiceButton: {
+    padding: 12,
+    borderRadius: 25,
+    backgroundColor: '#2E7D32',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   voiceButtonActive: {
     backgroundColor: '#FF3B30',
     transform: [{ scale: 1.1 }],
   },
-  listeningText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  scrollContent: {
-    padding: 16,
-  },
-  notificationButton: {
+  stopButton: {
     padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#ff4444',
+  },
+  muteButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#666',
+  },
+  recordingIndicator: {
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    marginBottom: 16,
+  },
+  recordingText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  transcriptContainer: {
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+  },
+  transcriptLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  transcriptText: {
+    fontSize: 16,
   },
   welcomeCard: {
     padding: 20,
@@ -1562,10 +1794,61 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 0,
   },
+  languageContainer: {
+    marginBottom: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  languageTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    color: '#333',
+  },
+  languageScroll: {
+    marginBottom: 12,
+  },
   languageButton: {
-    padding: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 20,
+    marginRight: 8,
+    borderWidth: 1,
+  },
+  languageText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  selectedLanguage: {
     backgroundColor: '#5856D6',
+  },
+  selectedLanguageText: {
+    color: 'white',
+  },
+  showLanguageSelector: {
+    display: 'flex',
+  },
+  voiceButtonText: {
+    color: 'white',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  testButton: {
+    padding: 12,
+    borderRadius: 20,
+    backgroundColor: '#2E7D32',
+    alignItems: 'center',
+  },
+  testButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   languageSelector: {
     position: 'absolute',
@@ -1593,22 +1876,20 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginVertical: 4,
   },
-  selectedLanguage: {
-    backgroundColor: '#5856D6',
+  voiceSection: {
+    marginBottom: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  languageText: {
-    fontSize: 16,
-    color: '#333',
-  },
-  selectedLanguageText: {
+  stopButtonText: {
     color: 'white',
-  },
-  showLanguageSelector: {
-    display: 'flex',
-  },
-  voiceButtonText: {
-    color: 'white',
-    fontSize: 12,
-    marginTop: 4,
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });

@@ -1,0 +1,340 @@
+{
+  "1KZkXXxJJtZlBeZpMlPi": {
+    "id": 1,
+    "title": "Pradhan Mantri Kisan Samman Nidhi (PM-KISAN)",
+    "state": "ALL",
+    "category": "Farming",
+    "description": "₹6,000 annually to eligible farmers in three installments",
+    "criteria": "All landholding farmer families with cultivable land. Excludes taxpayers or individuals with income above taxable limits",
+    "language": {
+      "hii": "पात्र किसानों को सालाना ₹6,000 तीन किश्तों में।"
+    },
+    "applyLink": "https://pmkisan.gov.in"
+  },
+  "4Pos6QGDpY503iguWWcA": {
+    "id": 25,
+    "title": "Fisheries and Aquaculture Infrastructure Development Fund (FIDF)",
+    "state": "ALL",
+    "category": "Farming",
+    "description": "Provides financial assistance for creating fisheries infrastructure.",
+    "applyLink": "https://fidf.gov.in",
+    "eligibilityCriteria": {
+      "incomeLimit": "No income bar, but preference to small-scale fishers and cooperatives"
+    }
+  },
+  "5zKLLF7hNGz3kHzFX5FY": {
+    "id": 8,
+    "title": "Atal Bhujal Yojana",
+    "state": "ALL",
+    "category": "Water Management",
+    "description": "Sustainable groundwater management with community participation",
+    "criteria": "Communities in selected water-stressed blocks. No income cap at individual level",
+    "language": {
+      "hi": "समुदाय की भागीदारी से भूजल प्रबंधन।"
+    },
+    "applyLink": " https://jalshakti-dowr.gov.in"
+  },
+  "6cfuGNyfwpxsGvuEMiKd": {
+    "id": 16,
+    "title": "National Beekeeping & Honey Mission (NBHM)",
+    "state": "ALL",
+    "category": "Farming",
+    "description": "Supports scientific beekeeping and honey production",
+    "criteria": "All beekeepers and related FPOs. No income limit specified",
+    "language": {
+      "hi": "वैज्ञानिक मधुमक्खी पालन और शहद उत्पादन को बढ़ावा।"
+    },
+    "applyLink": "https://nbhm.gov.in"
+  },
+  "DtfckkzEHaxNAFzUw0Wp": {
+    "id": 20,
+    "title": "Madhya Pradesh State Farmers Welfare Scheme",
+    "state": "Madhya Pradesh",
+    "category": "Farming",
+    "description": "Offers financial assistance to farmers for crop production",
+    "criteria": "Registered MP farmers with annual family income less than ₹2 lakh",
+    "language": {
+      "hi": "कृषि उत्पादन के लिए किसानों को वित्तीय सहायता।"
+    },
+    "applyLink": "https://mpkrishi.mp.gov.in"
+  },
+  "Fh02j5VkknebhLctDGUu": {
+    "id": 7,
+    "title": "Soil Health Card Scheme",
+    "state": "ALL",
+    "category": "Farming",
+    "description": "Soil cards to promote balanced fertilizer usage",
+    "criteria": "All farmers eligible. No income restrictions",
+    "language": {
+      "hi": "मिट्टी स्वास्थ्य कार्ड से संतुलित उर्वरक उपयोग को बढ़ावा।"
+    },
+    "applyLink": "https://soilhealth.dac.gov.in"
+  },
+  "H8syNApWh1PmLyoVQ0oK": {
+    "id": 17,
+    "title": "Kisan Credit Card (KCC) Scheme",
+    "state": "ALL",
+    "criteria": "Farmers involved in farming or allied activities with annual income under ₹1.5 lakh preferred for subsidy-linked interest",
+    "language": {
+      "hi": "किसानों को अल्पकालिक और दीर्घकालिक ऋण सहायता।"
+    },
+    "applyLink": "https://nabard.org",
+    "category": "General",
+    "description": "No description available"
+  },
+  "MMXJEvcX35PT4BnthZ2U": {
+    "id": 6,
+    "title": "PM Kisan Maan-Dhan Yojana",
+    "state": "ALL",
+    "category": "Pension",
+    "description": "Monthly pension of ₹3,000 for farmers after age 60",
+    "criteria": "Small/marginal farmers aged 18–40 years with cultivable land up to 2 hectares and monthly income below ₹15,000",
+    "language": {
+      "hi": "60 वर्ष के बाद किसानों को ₹3,000 मासिक पेंशन।"
+    },
+    "applyLink": "https://maandhan.in"
+  },
+  "MqBnYA4xucyPfw786Ke5": {
+    "id": 11,
+    "title": "Sub-Mission on Agricultural Mechanization (SMAM)",
+    "state": "ALL",
+    "category": "Farming",
+    "description": "Facilitates access to agricultural machinery for small and marginal farmers",
+    "criteria": "Small and marginal farmers with income under ₹1.5 lakh/year prioritized for subsidy",
+    "language": {
+      "hi": "छोटे और सीमांत किसानों के लिए कृषि यंत्रीकरण तक पहुंच को बढ़ावा।"
+    },
+    "applyLink": "https://agrimachinery.nic.in"
+  },
+  "NPULhIvvd5R3OQmiOcdC": {
+    "id": 21,
+    "title": "Mukhyamantri Krishi Ashirwad Yojana",
+    "state": "Farming",
+    "description": "Provides financial assistance for paddy, maize, and pulses farming",
+    "language": {
+      "hi": "धान, मक्का, और दालों की खेती के लिए वित्तीय सहायता।"
+    },
+    "applyLink": "https://agriculture.jharkhand.gov.in",
+    "category": "General",
+    "eligibilityCriteria": {
+      "incomeLimit": "Annual family income should be below ₹1.5 lakh"
+    }
+  },
+  "ZTbH01KioAjRpsjYRoFM": {
+    "id": 12,
+    "title": "Pradhan Mantri Krishi Sinchayee Yojana (PMKSY) ",
+    "state": "ALL",
+    "category": "Water Management",
+    "description": "Aims to increase irrigation coverage to enhance crop production",
+    "criteria": "Farmers in non-irrigated zones. No income restrictions",
+    "language": {
+      "hi": "कृषि उत्पादन बढ़ाने के लिए सिंचाई कवरेज में वृद्धि।"
+    },
+    "applyLink": "https://pkvy.gov.in"
+  },
+  "aUEmgE5RnTiyIin3oxb2": {
+    "id": 15,
+    "title": "Pradhan Mantri Annadata Aay Sanrakshan Abhiyan (PM-AASHA)",
+    "state": "ALL",
+    "category": "Farming",
+    "description": "Aims to support farmers' income by ensuring MSP on crops",
+    "criteria": "Farmers growing MSP-declared crops. No income barrier",
+    "language": {
+      "hi": "फसलों पर न्यूनतम समर्थन मूल्य सुनिश्चित करने के लिए किसानों की आय का समर्थन।"
+    },
+    "applyLink": "https://pm-aasha.gov.in"
+  },
+  "c8tfYwEAoBOMKlvDQebS": {
+    "id": 9,
+    "title": "Agriculture Infrastructure Fund (AIF)",
+    "state": "ALL",
+    "description": "No description available",
+    "criteria": "Open to all farmers and FPOs. Income not a restricting factor but project viability is assessed",
+    "language": {
+      "hi": "उत्पादन के बाद प्रबंधन और सामुदायिक कृषि संपत्ति के लिए वित्त पोषण।",
+      "applyLink": "https://aif.gov.in"
+    },
+    "applyLink": "https://example.com",
+    "category": "General"
+  },
+  "cw0YrsNqflPjdRhQAUvJ": {
+    "id": 13,
+    "title": "Paramparagat Krishi Vikas Yojana (PKVY)",
+    "state": "ALL",
+    "category": "Farming",
+    "description": "Promotes organic farming with cluster-based approach",
+    "criteria": "Any farmer interested in organic farming. No income limit specified",
+    "language": {
+      "hi": "क्लस्टर-आधारित तरीके से जैविक खेती को बढ़ावा।"
+    },
+    "applyLink": "https://pkvy.gov.in"
+  },
+  "iKbi9f8Coz8Iee1RlM4M": {
+    "id": 22,
+    "title": "Pradhan Mantri Krishi Sinchayee Yojana - Har Khet Ko Pani",
+    "state": "ALL",
+    "category": "Water Management",
+    "description": "Provides irrigation solutions to increase farm productivity",
+    "language": {
+      "hi": "कृषि उत्पादकता बढ़ाने के लिए सिंचाई समाधान प्रदान करता है"
+    },
+    "applyLink": " https://pmksy.gov.in",
+    "eligibilityCriteria": {
+      "incomeLimit": "No specific income limit; priority to small and marginal farmers"
+    }
+  },
+  "jN0UIfog7bQ5IU7HvTDU": {
+    "id": 26,
+    "title": "Small Farmers’ Agri-Business Consortium (SFAC)",
+    "state": "ALL",
+    "category": "Farming",
+    "description": "Promotes agribusiness ventures for small and marginal farmers.",
+    "language": {
+      "hi": "छोटे और सीमांत किसानों के लिए कृषि व्यापार योजनाओं को बढ़ावा देता है।"
+    },
+    "applyLink": " http://sfacindia.com",
+    "eligibilityCriteria": {
+      "incomeLimit": "Applicable to small and marginal farmers with low income"
+    }
+  },
+  "kL3sugkcJGiTfmXTPHyd": {
+    "id": 10,
+    "title": "National Food Security Mission (NFSM)",
+    "state": "ALL",
+    "category": "Farming",
+    "description": "Enhances rice, wheat, pulses, and coarse cereals production",
+    "criteria": "Farmers growing targeted crops. No specific income limit",
+    "language": {
+      "hi": "चावल, गेहूं, दालों और मोटे अनाजों के उत्पादन को बढ़ावा।",
+      "applyLink": "https://nfsm.gov.in\n"
+    },
+    "applyLink": "https://example.com"
+  },
+  "loG2T12FvKmpCn1z1hfg": {
+    "id": 5,
+    "title": "Pradhan Mantri Fasal Bima Yojana (PMFBY)",
+    "state": "ALL",
+    "category": "Insurance",
+    "description": "Crop insurance against natural calamities with low premium",
+    "criteria": "All farmers growing notified crops, regardless of income level",
+    "language": {
+      "hi": "प्राकृतिक आपदाओं के खिलाफ फसल बीमा।"
+    },
+    "applyLink": "https://pmfby.gov.in\n"
+  },
+  "n24Kll1uaTEuWUeLvfi8": {
+    "id": 18,
+    "title": "Rashtriya Krishi Vikas Yojana (RKVY)",
+    "state": "ALL",
+    "category": "Farming",
+    "description": "Promotes agriculture development through state-level interventions",
+    "language": {
+      "hi": "राज्य स्तर पर कृषि विकास को बढ़ावा।"
+    },
+    "applyLink": "https://rkvy.nic.in"
+  },
+  "nhKw31KR22S4hZXUquyM": {
+    "id": 27,
+    "title": "Mahatma Gandhi National Rural Employment Guarantee Act (MGNREGA)",
+    "state": "ALL",
+    "category": "Farming",
+    "description": "No description available",
+    "language": {
+      "hi": "छोटे और सीमांत किसानों के लिए कृषि व्यापार योजनाओं को बढ़ावा देता है।"
+    },
+    "applyLink": "https://mgnrega.gov.in",
+    "eligibilityCriteria": {
+      "incomeLimit": "Applicable to small and marginal farmers with low income"
+    }
+  },
+  "oTioHxa8vzFnA7MB2zOV": {
+    "id": 3,
+    "title": "Bhavantar Bhugtan Yojana",
+    "state": "Madhya Pradesh",
+    "category": "Farming",
+    "description": "No description available",
+    "criteria": "Registered farmers of Madhya Pradesh with no specified income cap",
+    "language": {
+      " hi": "बाजार मूल्य एमएसपी से कम होने पर किसानों को मुआवजा।",
+      "applyLink": "https://mpkrishi.mp.gov.in"
+    },
+    "applyLink": "https://example.com"
+  },
+  "pZGA2jMXq7Pssq8zIprR": {
+    "id": 24,
+    "state": "ALL",
+    "category": "Farming",
+    "description": "Promotes agricultural extension and modernization of farming techniques",
+    "language": {
+      "hi": "कृषि विस्तार और खेती की तकनीकों के आधुनिकीकरण को बढ़ावा देता है"
+    },
+    "applyLink": "https://nmaet.nic.in",
+    "title": "Scheme 24",
+    "eligibilityCriteria": {
+      "incomeLimit": "No income limit; farmers from all income groups are eligible"
+    }
+  },
+  "q8ddyiMsCOB0y0SdJRpL": {
+    "id": 23,
+    "title": "Bhoomi Heen Kisan Mazdoor Yojana",
+    "state": "Rajasthan",
+    "category": "Farming",
+    "description": "Provides financial support to landless farmers and agricultural laborers",
+    "language": {
+      "hi": "भूमिहीन किसानों और कृषि श्रमिकों को वित्तीय सहायता प्रदान करता है"
+    },
+    "applyLink": "https://agriculture.rajasthan.gov.in",
+    "eligibilityCriteria": {
+      "incomeLimit": "Applicable to BPL families and landless laborers"
+    }
+  },
+  "qsVpW2RpNnzs8EMkZCn9": {
+    "id": 14,
+    "title": "National Mission for Sustainable Agriculture (NMSA)",
+    "state": "ALL",
+    "category": "Farming",
+    "description": "Focuses on sustainable agriculture practices to combat climate change",
+    "criteria": "Farmers adopting sustainable practices. No income limit set",
+    "language": {
+      "hi": "जलवायु परिवर्तन से निपटने के लिए सतत कृषि प्रथाओं पर जोर।"
+    },
+    "applyLink": "https://nmsa.gov.in"
+  },
+  "vtjOnQOlTvcO3HdhPciU": {
+    "id": 2,
+    "title": "Rythu Bandhu Scheme",
+    "state": "Telangana",
+    "category": "Farming",
+    "description": "₹5,000 per acre per season to farmers for both Rabi and Kharif crops",
+    "criteria": "Farmers owning agricultural land in Telangana. No specific income limit, but institutional landowners are excluded",
+    "language": {
+      "te": "రబీ మరియు ఖరీఫ్ సీజన్లకు ప్రతి ఎకరానికి రూ.5000",
+      " applyLink": "https://pmkisan.gov.in"
+    },
+    "applyLink": "https://example.com"
+  },
+  "whjKtFEWI6YflAikppee": {
+    "id": 19,
+    "title": "Zero Budget Natural Farming (ZBNF)",
+    "state": "Andhra Pradesh, Telangana",
+    "category": "Farming",
+    "description": "Encourages chemical-free, low-cost farming practices",
+    "criteria": "Farmers in Andhra Pradesh and Telangana with preference to low-income and small farmers",
+    "language": {
+      "hi": "रासायनिक मुक्त और कम लागत वाली खेती को बढ़ावा।"
+    },
+    "applyLink": "https://pmkisan.gov.in"
+  },
+  "zD4oDP6OwxheNiKqKsUM": {
+    "id": 4,
+    "title": "Rajiv Gandhi Kisan Nyay Yojana",
+    "state": "Chhattisgarh",
+    "category": "Farming",
+    "description": "No description available",
+    "criteria": "Farmers in Chhattisgarh cultivating notified crops. No specific income limit, but must be small or marginal",
+    "language": {
+      "hi": "कृषि उत्पादन बढ़ाने के लिए किसानों को आर्थिक सहायता।"
+    },
+    "applyLink": "\thttps://mpkrishi.mp.gov.in"
+  }
+}

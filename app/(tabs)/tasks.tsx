@@ -8,20 +8,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeColor } from '../../hooks/useThemeColor';
 import VoiceService from '../../services/VoiceService';
 import { GEMINI_API_KEY, isGeminiAvailable } from '../../constants/config';
+import TaskService, { Task } from '../../services/taskService';
 
 // Initialize Gemini API
 const genAI = isGeminiAvailable() ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
-
-// Define Task interface
-interface Task {
-  id: number;
-  title: string;
-  priority: 'high' | 'medium' | 'low';
-  category: 'farming' | 'personal' | 'general';
-  dueDate: string;
-  dueTime: string;
-  completed: boolean;
-}
 
 // Configure notifications
 Notifications.setNotificationHandler({
@@ -34,7 +24,6 @@ Notifications.setNotificationHandler({
 });
 
 export default function TasksScreen() {
-  console.log('TasksScreen: Component mounted');
   
   // Use white background for all layouts
   const backgroundColor = '#ffffff';
@@ -57,6 +46,23 @@ export default function TasksScreen() {
 
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'farming' | 'personal' | 'general'>('all');
   const categories: ('all' | 'farming' | 'personal' | 'general')[] = ['all', 'farming', 'personal', 'general'];
+
+  // Initialize TaskService
+  const taskService = useMemo(() => TaskService.getInstance(), []);
+
+  useEffect(() => {
+    // Subscribe to task updates from TaskService
+    const handleTaskUpdate = (updatedTasks: Task[]) => {
+      setTasks([...updatedTasks]); // Force a new array reference
+    };
+
+    taskService.addListener(handleTaskUpdate);
+
+    // Cleanup listener on unmount
+    return () => {
+      taskService.removeListener(handleTaskUpdate);
+    };
+  }, [taskService]);
 
   const { ongoingTasks, completedTasks } = useMemo(() => {
     const ongoing: Task[] = [];
@@ -243,12 +249,10 @@ export default function TasksScreen() {
           }
           
           if (completedTasks.length > 0) {
-            // Mark all matching tasks as completed
-            setTasks(tasks.map(task => 
-              completedTasks.some(completedTask => completedTask.id === task.id) 
-                ? { ...task, completed: true } 
-                : task
-            ));
+            // Mark all matching tasks as completed using TaskService
+            for (const completedTask of completedTasks) {
+              await taskService.toggleTaskStatus(completedTask.id);
+            }
             
             if (completedTasks.length === 1) {
               setAssistantResponse(`Great! I've marked "${completedTasks[0].title}" as completed.`);
@@ -362,8 +366,8 @@ export default function TasksScreen() {
         
         // Check if a similar task already exists - improved similarity detection
         const existingTask = tasks.find(task => {
-          const taskWords = task.title.toLowerCase().split(/\s+/).filter(word => word.length > 2);
-          const newTaskWords = taskData.title.toLowerCase().split(/\s+/).filter(word => word.length > 2);
+          const taskWords = task.title.toLowerCase().split(/\s+/).filter((word: string) => word.length > 2);
+          const newTaskWords = taskData.title.toLowerCase().split(/\s+/).filter((word: string) => word.length > 2);
           
           // Calculate word overlap
           const commonWords = taskWords.filter((word: string) => 
@@ -392,14 +396,14 @@ export default function TasksScreen() {
           return;
         }
         
-        // Add the new task
-        const newTask: Task = {
-          ...taskData,
-          id: Date.now(),
-          completed: false
-        };
+        // Add the new task using TaskService
+        const newTaskData = taskService.parseTaskFromText(taskData.title);
+        newTaskData.priority = taskData.priority || newTaskData.priority;
+        newTaskData.category = taskData.category || newTaskData.category;
+        newTaskData.dueDate = taskData.dueDate || newTaskData.dueDate;
+        newTaskData.dueTime = taskData.dueTime || newTaskData.dueTime;
         
-        setTasks(prevTasks => [...prevTasks, newTask]);
+        await taskService.addTask(newTaskData);
         
         // Generate a response for the user
         const responsePrompt = `Generate a brief confirmation message for adding a task with the following details:
@@ -442,30 +446,40 @@ export default function TasksScreen() {
     }
   };
 
-  const addTask = () => {
-    if (newTask.trim()) {
-      const task: Task = {
-        id: Date.now(),
-        title: newTask,
-        priority: 'medium',
-        category: 'general',
-        dueDate: new Date().toISOString().split('T')[0],
-        dueTime: new Date(Date.now() + 3600000).toTimeString().split(' ')[0].substring(0, 5),
-        completed: false
-      };
-      setTasks([...tasks, task]);
+  const addTask = async () => {
+    if (!newTask.trim()) return;
+
+    try {
+      setIsProcessing(true);
+      setError(null);
+
+      const taskData = taskService.parseTaskFromText(newTask);
+      await taskService.addTask(taskData);
       setNewTask('');
+    } catch (error) {
+      console.error('Error adding task:', error);
+      setError('Failed to add task. Please try again.');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
-  const toggleTaskStatus = (taskId: number) => {
-    setTasks(tasks.map(task => 
-      task.id === taskId ? { ...task, completed: !task.completed } : task
-    ));
+  const toggleTaskStatus = async (taskId: number) => {
+    try {
+      await taskService.toggleTaskStatus(taskId);
+    } catch (error) {
+      console.error('Error toggling task status:', error);
+      setError('Failed to update task. Please try again.');
+    }
   };
 
-  const deleteTask = (taskId: number) => {
-    setTasks(tasks.filter(task => task.id !== taskId));
+  const deleteTask = async (taskId: number) => {
+    try {
+      await taskService.deleteTask(taskId);
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      setError('Failed to delete task. Please try again.');
+    }
   };
 
   const toggleListening = async () => {
@@ -576,8 +590,13 @@ export default function TasksScreen() {
         <TouchableOpacity 
           style={[styles.addButton, { backgroundColor: accentColor }]} 
           onPress={addTask}
+          disabled={isProcessing}
         >
-          <FontAwesome name="plus" size={20} color="#fff" />
+          {isProcessing ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <FontAwesome name="plus" size={20} color="#fff" />
+          )}
         </TouchableOpacity>
       </View>
 
@@ -650,7 +669,7 @@ export default function TasksScreen() {
                             />
                             <Text style={styles.taskDetailText}>{task.priority}</Text>
                           </View>
-                                                    <View style={styles.taskDetail}>
+                          <View style={styles.taskDetail}>
                             <FontAwesome name={getCategoryIcon(task.category) as any} size={12} color="#6c757d" />
                             <Text style={styles.taskDetailText}>{task.category}</Text>
                           </View>
@@ -669,7 +688,7 @@ export default function TasksScreen() {
                         style={styles.deleteButton}
                         onPress={() => deleteTask(task.id)}
                       >
-                        <FontAwesome name="trash" size={18} color="#e53935" />
+                        <FontAwesome name="trash" size={16} color="#dc3545" />
                       </TouchableOpacity>
                     </View>
                   ))}
@@ -677,24 +696,25 @@ export default function TasksScreen() {
               ) : null
             )}
 
+            {/* Completed Tasks Section */}
             {completedTasks.length > 0 && (
-              <View style={styles.prioritySection}>
-                <Text style={styles.priorityTitle}>Completed</Text>
+              <View style={styles.completedSection}>
+                <Text style={styles.completedTitle}>Completed Tasks</Text>
                 {completedTasks.map(task => (
-                  <View key={task.id} style={styles.taskCard}>
+                  <View key={task.id} style={[styles.taskCard, styles.completedTaskCard]}>
                     <TouchableOpacity
                       style={styles.checkboxContainer}
                       onPress={() => toggleTaskStatus(task.id)}
                     >
                       <FontAwesome
-                        name={task.completed ? 'check-square-o' : 'square-o'}
+                        name="check-square-o"
                         size={20}
-                        color={task.completed ? '#2E7D32' : '#6c757d'}
+                        color="#2E7D32"
                       />
                     </TouchableOpacity>
 
                     <View style={styles.taskContent}>
-                      <Text style={[styles.taskTitle, task.completed && styles.completedTask]}>
+                      <Text style={[styles.taskTitle, styles.completedTask]}>
                         {task.title}
                       </Text>
                       <View style={styles.taskDetails}>
@@ -706,17 +726,9 @@ export default function TasksScreen() {
                           />
                           <Text style={styles.taskDetailText}>{task.priority}</Text>
                         </View>
-                                                <View style={styles.taskDetail}>
+                        <View style={styles.taskDetail}>
                           <FontAwesome name={getCategoryIcon(task.category) as any} size={12} color="#6c757d" />
                           <Text style={styles.taskDetailText}>{task.category}</Text>
-                        </View>
-                        <View style={styles.taskDetail}>
-                          <FontAwesome name="calendar" size={12} color="#6c757d" />
-                          <Text style={styles.taskDetailText}>{task.dueDate}</Text>
-                        </View>
-                        <View style={styles.taskDetail}>
-                          <FontAwesome name="clock-o" size={12} color="#6c757d" />
-                          <Text style={styles.taskDetailText}>{task.dueTime}</Text>
                         </View>
                       </View>
                     </View>
@@ -725,7 +737,7 @@ export default function TasksScreen() {
                       style={styles.deleteButton}
                       onPress={() => deleteTask(task.id)}
                     >
-                      <FontAwesome name="trash" size={18} color="#e53935" />
+                      <FontAwesome name="trash" size={16} color="#dc3545" />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -751,91 +763,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-  },
-  voiceSection: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
-  },
-  voiceHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  voiceTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  micButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#e9ecef',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  micButtonActive: {
-    backgroundColor: '#2E7D32',
-  },
-  recordingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: '#f5f5f5',
-    marginBottom: 12,
-  },
-  recordingText: {
-    marginLeft: 8,
-    fontSize: 12,
-  },
-  transcriptContainer: {
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginBottom: 12,
-  },
-  transcriptLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  transcriptText: {
-    fontSize: 14,
-  },
-  processingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  processingText: {
-    marginLeft: 8,
-    fontSize: 12,
-  },
-  responseContainer: {
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginBottom: 12,
-  },
-  responseLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  responseText: {
-    fontSize: 14,
-  },
-  errorContainer: {
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: '#ffebee',
-    marginBottom: 12,
-  },
-  errorText: {
-    color: '#e53935',
-    fontSize: 12,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -974,5 +901,102 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 12,
     paddingHorizontal: 4,
+  },
+  errorContainer: {
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#ffebee',
+    marginBottom: 12,
+  },
+  errorText: {
+    color: '#e53935',
+    fontSize: 12,
+  },
+  completedSection: {
+    marginBottom: 16,
+  },
+  completedTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  completedTaskCard: {
+    backgroundColor: '#f8f9fa',
+  },
+  voiceSection: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+  },
+  voiceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  voiceTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginRight: 12,
+  },
+  micButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#e9ecef',
+  },
+  micButtonActive: {
+    backgroundColor: '#2E7D32',
+  },
+  recordingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  recordingText: {
+    fontSize: 14,
+    marginLeft: 8,
+  },
+  transcriptContainer: {
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  transcriptLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  transcriptText: {
+    fontSize: 12,
+  },
+  processingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  processingText: {
+    fontSize: 14,
+    marginLeft: 8,
+  },
+  responseContainer: {
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  responseLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  responseText: {
+    fontSize: 12,
   },
 });
