@@ -4,7 +4,7 @@ import { BlurView } from 'expo-blur';
 import { router } from 'expo-router';
 import { Audio } from 'expo-av';
 import { collection, getDocs } from 'firebase/firestore';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Image, Linking, Platform, Modal, TextInput, KeyboardAvoidingView, ActivityIndicator, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeColor } from '../../hooks/useThemeColor';
@@ -55,7 +55,9 @@ interface ChatMessage {
   parts: { text: string }[];
 }
 
-
+interface ChatSession {
+  sendMessage: (message: string) => Promise<{ response: { text: () => string } }>;
+}
 
 const NewsSection = () => {
   const [news, setNews] = useState<NewsItem[]>([]);
@@ -201,7 +203,7 @@ export default function HomeScreen() {
   const [isVoiceAvailable, setIsVoiceAvailable] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-
+  const [chatSession, setChatSession] = useState<ChatSession | null>(null);
   const [currentContext, setCurrentContext] = useState<string>('');
   const [selectedLanguage, setSelectedLanguage] = useState('hindi');
   const [showLanguageSelector, setShowLanguageSelector] = useState(false);
@@ -271,7 +273,7 @@ export default function HomeScreen() {
     };
   }, [selectedLanguage]); // Add selectedLanguage as dependency
 
-  const handleMicPress = useCallback(async () => {
+  const handleMicPress = async () => {
     try {
       if (isListening) {
         await voiceService.current?.stopListening();
@@ -289,10 +291,10 @@ export default function HomeScreen() {
       setError('Failed to access microphone. Please check permissions.');
       setIsListening(false);
     }
-  }, [selectedLanguage, isListening]);
+  };
 
   // Add manual stop function
-  const handleStopRecording = useCallback(async () => {
+  const handleStopRecording = async () => {
     try {
       if (isListening) {
         await voiceService.current?.stopListening();
@@ -301,18 +303,19 @@ export default function HomeScreen() {
     } catch (error) {
       console.error('Error stopping recording:', error);
     }
-  }, [isListening]);
+  };
 
   const toggleMute = async () => {
     try {
       if (isMuted) {
-        // Unmute - don't automatically speak anything, just unmute
-        console.log('Unmuting - speech will be enabled for new responses');
+        // Unmute - speak the current response if there is one
+        if (assistantResponse && voiceService.current) {
+          await voiceService.current.speak(assistantResponse);
+        }
       } else {
         // Mute - stop any ongoing speech
         if (voiceService.current) {
           await voiceService.current.stop();
-          console.log('Muted - stopped ongoing speech');
         }
       }
       setIsMuted(!isMuted);
@@ -327,201 +330,95 @@ export default function HomeScreen() {
 
   const getGeminiResponse = async (prompt: string) => {
     try {
-      const model = genAI?.getGenerativeModel({ model: "gemini-1.5-pro" });
-      if (!model) {
-        console.error('Gemini model not available');
-        return 'Sorry, I am unable to process your request at the moment.';
+      if (!genAI) {
+        throw new Error('Gemini API is not available');
       }
 
-      // Add user message to chat history first
-      const userMessage: ChatMessage = {
-        role: 'user',
-        parts: [{ text: prompt }]
-      };
-      setChatHistory((prev: ChatMessage[]) => [...prev, userMessage]);
-
-      // STEP 1: Check for scheme detection FIRST (before Gemini)
-      const detectedScheme = SchemeService.detectScheme(prompt);
+      // Check if this is a greeting and if we've already introduced
+      const isGreeting = /^(नमस्ते|hello|hi|namaste|नमस्कार|ਸਤ ਸ੍ਰੀ ਅਕਾਲ|નમસ્તે|নমস্কার|ನಮಸ್ಕಾರ)/i.test(prompt.trim());
       
-      if (detectedScheme) {
-        // Check if user explicitly asked for redirection
-        const redirectKeywords = {
-          hindi: ['मुझे ले जाएं', 'दिखाएं', 'जाएं', 'मार्गदर्शन करें', 'रेडायरेक्ट करें'],
-          english: ['redirect me', 'show me', 'take me to', 'guide me to', 'go to'],
-          kannada: ['ನನ್ನನ್ನು ತೋರಿಸಿ', 'ನನ್ನನ್ನು ಕರೆದುಕೊಂಡು ಹೋಗಿ', 'ಮಾರ್ಗದರ್ಶನ ಮಾಡಿ'],
-          marathi: ['मला दाखवा', 'मला घेऊन जा', 'मार्गदर्शन करा'],
-          punjabi: ['ਮੈਨੂੰ ਦਿਖਾਓ', 'ਮੈਨੂੰ ਲੈ ਜਾਓ', 'ਮਾਰਗਦਰਸ਼ਨ ਕਰੋ'],
-          gujarati: ['મને બતાવો', 'મને લઈ જાઓ', 'માર્ગદર્શન આપો'],
-          bengali: ['আমাকে দেখান', 'আমাকে নিয়ে যান', 'গাইড করুন']
-        };
-
-        const currentLanguageRedirectKeywords = redirectKeywords[selectedLanguage as keyof typeof redirectKeywords] || redirectKeywords.english;
-        const isExplicitRedirectRequest = currentLanguageRedirectKeywords.some(keyword => 
-          prompt.toLowerCase().includes(keyword.toLowerCase())
-        );
-
-        if (isExplicitRedirectRequest) {
-          // Direct redirection for explicit requests
-          const redirectMessages = {
-            hindi: `मैं आपको "${detectedScheme.title}" योजना के लिए योजनाओं टैब में ले जा रहा हूं।`,
-            english: `I will redirect you to the "${detectedScheme.title}" scheme in the Schemes tab.`,
-            kannada: `ನಾನು ನಿಮ್ಮನ್ನು "${detectedScheme.title}" ಯೋಜನೆಗೆ ಯೋಜನೆಗಳ ಟ್ಯಾಬ್‌ನಲ್ಲಿ ಮಾರ್ಗದರ್ಶನ ಮಾಡುತ್ತೇನೆ.`,
-            marathi: `मी तुम्हाला "${detectedScheme.title}" योजनेकडे योजना टॅबमध्ये मार्गदर्शन करतो.`,
-            punjabi: `ਮੈਂ ਤੁਹਾਨੂੰ "${detectedScheme.title}" ਯੋਜਨਾ ਵੱਲ ਯੋਜਨਾਵਾਂ ਟੈਬ ਵਿੱਚ ਮਾਰਗਦਰਸ਼ਨ ਕਰਾਂਗਾ.`,
-            gujarati: `હું તમને "${detectedScheme.title}" યોજના તરફ યોજનાઓ ટેબમાં માર્ગદર્શન આપીશ.`,
-            bengali: `আমি আপনাকে "${detectedScheme.title}" প্রকল্পে প্রকল্প ট্যাবে গাইড করব।`
-          };
-          
-          const response = redirectMessages[selectedLanguage as keyof typeof redirectMessages] || redirectMessages.english;
-          
-          // Add model response to chat history
-          const modelMessage: ChatMessage = {
-            role: 'model',
-            parts: [{ text: response }]
-          };
-          setChatHistory((prev: ChatMessage[]) => [...prev, modelMessage]);
-          
-          // Navigate to schemes tab with the detected scheme ID after speech completes
-          setTimeout(() => {
-            router.push({
-              pathname: '/schemes',
-              params: { 
-                schemeId: detectedScheme.id,
-                schemeName: detectedScheme.title 
-              }
-            });
-          }, 3000);
-          
-          return response;
-        } else {
-          // Provide brief description and ask for permission
-          const briefDescription = detectedScheme.description || 'This is a government scheme for farmers.';
-          const schemeInfoMessages = {
-            hindi: `"${detectedScheme.title}" योजना के बारे में: ${briefDescription} क्या आप इस योजना के बारे में विस्तृत जानकारी देखना चाहते हैं? मैं आपको योजनाओं टैब में ले जा सकता हूं।`,
-            english: `About "${detectedScheme.title}" scheme: ${briefDescription} Would you like to see detailed information about this scheme? I can take you to the Schemes tab.`,
-            kannada: `"${detectedScheme.title}" ಯೋಜನೆಯ ಬಗ್ಗೆ: ${briefDescription} ನೀವು ಈ ಯೋಜನೆಯ ಬಗ್ಗೆ ವಿವರವಾದ ಮಾಹಿತಿಯನ್ನು ನೋಡಲು ಬಯಸುವಿರಾ? ನಾನು ನಿಮ್ಮನ್ನು ಯೋಜನೆಗಳ ಟ್ಯಾಬ್‌ನಲ್ಲಿ ಕರೆದುಕೊಂಡು ಹೋಗಬಹುದು.`,
-            marathi: `"${detectedScheme.title}" योजनेबद्दल: ${briefDescription} तुम्हाला या योजनेबद्दल तपशीलवार माहिती पाहायची आहे का? मी तुम्हाला योजना टॅबमध्ये घेऊन जाऊ शकतो.`,
-            punjabi: `"${detectedScheme.title}" ਯੋਜਨਾ ਬਾਰੇ: ${briefDescription} ਕੀ ਤੁਸੀਂ ਇਸ ਯੋਜਨਾ ਬਾਰੇ ਵਿਸਤ੍ਰਿਤ ਜਾਣਕਾਰੀ ਦੇਖਣਾ ਚਾਹੁੰਦੇ ਹੋ? ਮੈਂ ਤੁਹਾਨੂੰ ਯੋਜਨਾਵਾਂ ਟੈਬ ਵਿੱਚ ਲੈ ਜਾ ਸਕਦਾ ਹਾਂ.`,
-            gujarati: `"${detectedScheme.title}" યોજના વિશે: ${briefDescription} શું તમે આ યોજના વિશે વિગતવાર માહિતી જોવા માંગો છો? હું તમને યોજનાઓ ટેબમાં લઈ જઈ શકું છું.`,
-            bengali: `"${detectedScheme.title}" প্রকল্প সম্পর্কে: ${briefDescription} আপনি কি এই প্রকল্প সম্পর্কে বিস্তারিত তথ্য দেখতে চান? আমি আপনাকে প্রকল্প ট্যাবে নিয়ে যেতে পারি।`
-          };
-          
-          const response = schemeInfoMessages[selectedLanguage as keyof typeof schemeInfoMessages] || schemeInfoMessages.english;
-          
-          // Add model response to chat history
-          const modelMessage: ChatMessage = {
-            role: 'model',
-            parts: [{ text: response }]
-          };
-          setChatHistory((prev: ChatMessage[]) => [...prev, modelMessage]);
-          
-          return response;
-        }
+      // Set introduction flag if this is the first greeting
+      if (isGreeting && !hasIntroduced) {
+        setHasIntroduced(true);
       }
 
-      // STEP 2: Check for affirmative responses to scheme permission requests
-      const affirmativeKeywords = {
-        hindi: ['हाँ', 'हां', 'बिल्कुल', 'ठीक है', 'हाँ जाएं', 'हां जाएं', 'ले जाएं', 'दिखाएं', 'जाएं'],
-        english: ['yes', 'okay', 'ok', 'sure', 'please', 'go ahead', 'show me', 'take me', 'go'],
-        kannada: ['ಹೌದು', 'ಸರಿ', 'ಖಂಡಿತ', 'ತೋರಿಸಿ', 'ಕರೆದುಕೊಂಡು ಹೋಗಿ', 'ಹೋಗಿ'],
-        marathi: ['होय', 'बरोबर', 'ठीक आहे', 'दाखवा', 'घेऊन जा', 'जा'],
-        punjabi: ['ਹਾਂ', 'ਠੀਕ ਹੈ', 'ਬਿਲਕੁਲ', 'ਦਿਖਾਓ', 'ਲੈ ਜਾਓ', 'ਜਾਓ'],
-        gujarati: ['હા', 'બરાબર', 'ચોક્કસ', 'બતાવો', 'લઈ જાઓ', 'જાઓ'],
-        bengali: ['হ্যাঁ', 'ঠিক আছে', 'নিশ্চয়', 'দেখান', 'নিয়ে যান', 'যান']
-      };
+      const model = genAI.getGenerativeModel({ 
+        model: "gemini-1.5-flash",
+        systemInstruction: `You are a friendly and knowledgeable agricultural assistant for Smart Bharat, designed to help Indian farmers. Your responses should be:
 
-      const currentLanguageAffirmativeKeywords = affirmativeKeywords[selectedLanguage as keyof typeof affirmativeKeywords] || affirmativeKeywords.english;
-      const isAffirmativeResponse = currentLanguageAffirmativeKeywords.some(keyword => 
-        prompt.toLowerCase().includes(keyword.toLowerCase())
-      );
+1. Natural and conversational - avoid robotic or formal language
+2. Focused on agriculture, farming, and rural development
+3. Helpful and practical - provide actionable advice when possible
+4. Culturally aware - use appropriate greetings and terms
+5. CRITICAL: ALWAYS respond in ${selectedLanguage.toUpperCase()} for ALL queries
+6. Keep responses concise - maximum 2-3 sentences for simple questions
+7. CRITICAL: Maintain exact context from previous messages for ALL types of queries
+8. For ANY follow-up question, provide more details about the EXACT SAME topic as the last message
+9. NEVER switch topics unless explicitly asked
+10. If the last message was about ANY topic, continue discussing that SAME topic
+11. CRITICAL: Remember the last topic discussed and maintain context throughout the conversation
+12. For ANY follow-up question, first understand what specific aspect of the previous topic is being asked about
 
-      // Check if this is an affirmative response to a scheme permission request
-      if (isAffirmativeResponse && chatHistory.length > 0) {
-        // Look for the last assistant message that asked about schemes
-        const recentMessages = chatHistory.slice(-4).reverse();
-        let schemeToRedirect = null;
-        
-        for (const message of recentMessages) {
-          if (message.role === 'model') {
-            const messageText = message.parts[0].text.toLowerCase();
-            // Check if this message asked about schemes
-            if (messageText.includes('scheme') || 
-                messageText.includes('योजना') || 
-                messageText.includes('ಯೋಜನೆ') ||
-                messageText.includes('schemes') ||
-                messageText.includes('टैब') ||
-                messageText.includes('ಟ್ಯಾಬ್')) {
-              
-              // Extract scheme name from quotes
-              const schemeNameMatch = message.parts[0].text.match(/"([^"]+)"/);
-              if (schemeNameMatch) {
-                const schemeName = schemeNameMatch[1];
-                schemeToRedirect = SchemeService.detectScheme(schemeName);
-                break;
-              }
-            }
-          }
-        }
+Task Handling Rules:
+- If the user's message is a request to add a task, reminder, or todo (in any language), respond ONLY with __TASK__: followed by a clear, concise, and actionable task description in the same language as the user's message.
+- Do NOT add any extra text, greetings, or explanations. Only output __TASK__: and the task description.
+- The task description should be ready to be added to a task manager (e.g., "Water the crops tomorrow morning", "खेत में खाद डालना है", etc.)
+- If the user's message is NOT a task, respond normally as per the other instructions.
 
-        if (schemeToRedirect) {
-          const redirectMessages = {
-            hindi: `मैं आपको "${schemeToRedirect.title}" योजना के लिए योजनाओं टैब में ले जा रहा हूं।`,
-            english: `I will redirect you to the "${schemeToRedirect.title}" scheme in the Schemes tab.`,
-            kannada: `ನಾನು ನಿಮ್ಮನ್ನು "${schemeToRedirect.title}" ಯೋಜನೆಗೆ ಯೋಜನೆಗಳ ಟ್ಯಾಬ್‌ನಲ್ಲಿ ಮಾರ್ಗದರ್ಶನ ಮಾಡುತ್ತೇನೆ.`,
-            marathi: `मी तुम्हाला "${schemeToRedirect.title}" योजनेकडे योजना टॅबमध्ये मार्गदर्शन करतो.`,
-            punjabi: `ਮੈਂ ਤੁਹਾਨੂੰ "${schemeToRedirect.title}" ਯੋਜਨਾ ਵੱਲ ਯੋਜਨਾਵਾਂ ਟੈਬ ਵਿੱਚ ਮਾਰਗਦਰਸ਼ਨ ਕਰਾਂਗਾ.`,
-            gujarati: `હું તમને "${schemeToRedirect.title}" યોજના તરફ યોજનાઓ ટેબમાં માર્ગદર્શન આપીશ.`,
-            bengali: `আমি আপনাকে "${schemeToRedirect.title}" প্রকল্পে প্রকল্প ট্যাবে গাইড করব।`
-          };
-          
-          const response = redirectMessages[selectedLanguage as keyof typeof redirectMessages] || redirectMessages.english;
-          
-          // Add model response to chat history
-          const modelMessage: ChatMessage = {
-            role: 'model',
-            parts: [{ text: response }]
-          };
-          setChatHistory((prev: ChatMessage[]) => [...prev, modelMessage]);
-          
-          // Navigate to schemes tab with the scheme ID
-          setTimeout(() => {
-            router.push({
-              pathname: '/schemes',
-              params: { 
-                schemeId: schemeToRedirect.id,
-                schemeName: schemeToRedirect.title 
-              }
-            });
-          }, 3000);
-          
-          return response;
-        }
-      }
+Introduction Rules:
+- ONLY introduce yourself on the VERY FIRST greeting of the conversation
+- If user has already greeted you before in this conversation, DO NOT introduce yourself again
+- If the conversation has history, continue naturally without introduction
+- Introduction should be in the selected language
+- Keep introduction short and clear
+- Include your name (Smart Bharat) and main purpose
+- Example introductions (ONLY for first greeting):
+  ${selectedLanguage === 'hindi' ? `
+  Hindi: "नमस्ते! मैं स्मार्ट भारत हूं, आपका कृषि सहायक। मैं किसानों को खेती, योजनाओं और कृषि से जुड़ी जानकारी देने में मदद करता हूं।"` : ''}
+  ${selectedLanguage === 'marathi' ? `
+  Marathi: "नमस्कार! मी स्मार्ट भारत आहे, तुमचा शेती सहाय्यक. मी शेतकऱ्यांना शेती, योजना आणि कृषी संबंधित माहिती देण्यात मदत करतो."` : ''}
+  ${selectedLanguage === 'punjabi' ? `
+  Punjabi: "ਸਤ ਸ੍ਰੀ ਅਕਾਲ! ਮੈਂ ਸਮਾਰਟ ਭਾਰਤ ਹਾਂ, ਤੁਹਾਡਾ ਖੇਤੀਬਾੜੀ ਸਹਾਇਕ. ਮੈਂ ਕਿਸਾਨਾਂ ਨੂੰ ਖੇਤੀਬਾੜੀ, ਯੋਜਨਾਵਾਂ ਅਤੇ ਖੇਤੀਬਾੜੀ ਸੰਬੰਧੀ ਜਾਣਕਾਰੀ ਦੇਣ ਵਿੱਚ ਮਦਦ ਕਰਦਾ ਹਾਂ."` : ''}
+  ${selectedLanguage === 'gujarati' ? `
+  Gujarati: "નમસ્તે! હું સ્માર્ટ ભારત છું, તમારો કૃષિ સહાયક. હું ખેડૂતોને ખેતી, યોજનાઓ અને કૃષિ સંબંધિત માહિતી આપવામાં મદਦ કરું છું."` : ''}
+  ${selectedLanguage === 'bengali' ? `
+  Bengali: "নমস্কার! আমি স্মার্ট ভারত, আপনার কৃষি সহায়ক. আমি কৃষকদের কৃষি, প্রকল্প এবং কৃষি সম্পর্কিত তথ্য প্রদান করতে সাহায্য করি."` : ''}
+  ${selectedLanguage === 'english' ? `
+  English: "Hello! I am Smart Bharat, your agricultural assistant. I help farmers with farming, schemes, and agricultural information."` : ''}
+  ${selectedLanguage === 'kannada' ? `
+  Kannada: "ನಮಸ್ಕಾರ! ನಾನು ಸ್ಮಾರ್ಟ್ ಭಾರತ, ನಿಮ್ಮ ಕೃಷಿ ಸಹಾಯಕ. ನಾನು ರೈತರಿಗೆ ಕೃಷಿ, ಯೋಜನೆಗಳು ಮತ್ತು ಕೃಷಿ ಸಂಬಂಧಿತ ಮಾಹಿತಿಯನ್ನು ನೀಡಲು ಸಹಾಯ ಮಾಡುತ್ತೇನೆ."` : ''}
 
-      // STEP 3: If no scheme detection or affirmative response, proceed with Gemini
-      const systemPrompt = `You are Smart Bharat, a helpful agricultural assistant focused on Indian farming, government schemes, and agricultural information. You help farmers with farming advice, scheme information, and agricultural queries.
+Context Retention Rules:
+- CRITICAL: ALWAYS maintain context from the previous message
+- If the last message was about a scheme (like PM-KISAN), continue discussing that scheme
+- If the last message was about crops, continue discussing those crops
+- If the last message was about farming techniques, continue discussing those techniques
+- If the last message was about weather, continue discussing weather
+- If the last message was about equipment, continue discussing that equipment
+- For ANY topic, remember the last discussed aspect and provide relevant follow-up information
+- NEVER ask for clarification about the previous topic unless absolutely necessary
+- ALWAYS assume the follow-up question is about the last discussed topic
+- If user mentions their location (like "मैं कोल्हापुर में रहता हूं"), remember this context
+- If user asks about specific crops (like "सोयाबीन"), continue discussing that crop
+- If user mentions weather conditions, relate it to farming advice
 
-IMPORTANT RULES:
-1. ONLY respond to agricultural and farming-related queries
-2. For non-agricultural queries, politely redirect with farming metaphors and puns
-3. Keep responses concise and informative
-4. Use the selected language: ${selectedLanguage}
-5. Maintain conversation context and memory
+Language Rules:
+- CRITICAL: You MUST respond in ${selectedLanguage.toUpperCase()} ONLY
+- NEVER mix languages in your response
+- Use proper grammar and vocabulary for ${selectedLanguage}
+- Use appropriate greetings for ${selectedLanguage}
+- Use proper numerals and currency symbols for ${selectedLanguage}
+- Use proper punctuation for ${selectedLanguage}
+- NEVER use any other language unless absolutely necessary (like scheme names)
 
+Language-Specific Instructions:
 ${selectedLanguage === 'hindi' ? `
 For Hindi:
 - Use proper Hindi grammar and vocabulary
 - Use Hindi numerals (१, २, ३)
 - Use Hindi currency symbol (₹)
-- Use Hindi greetings (नमस्ते, राम राम)
+- Use Hindi greetings (नमस्ते, प्रणाम)
 - Use Hindi punctuation` : ''}
-${selectedLanguage === 'kannada' ? `
-For Kannada:
-- Use proper Kannada grammar and vocabulary
-- Use Kannada numerals (೧, ೨, ೩)
-- Use Kannada currency symbol (₹)
-- Use Kannada greetings (ನಮಸ್ಕಾರ, ರಾಮ ರಾಮ)
-- Use Kannada punctuation` : ''}
 ${selectedLanguage === 'marathi' ? `
 For Marathi:
 - Use proper Marathi grammar and vocabulary
@@ -534,7 +431,7 @@ For Punjabi:
 - Use proper Punjabi grammar and vocabulary
 - Use Punjabi numerals (੧, ੨, ੩)
 - Use Punjabi currency symbol (₹)
-- Use Punjabi greetings (ਸਤ ਸ੍ਰੀ ਅਕਾਲ, ਰਾਮ ਰਾਮ)
+- Use Punjabi greetings (ਸਤ ਸ੍ਰੀ ਅਕਾਲ, ਫਿਰ ਮਿਲਾਂਗੇ)
 - Use Punjabi punctuation` : ''}
 ${selectedLanguage === 'gujarati' ? `
 For Gujarati:
@@ -569,7 +466,15 @@ Tone Instructions:
 Conciseness: Respond in short, informative sentences.
 Formality: Use polite language with slight formality.
 Clarity: Avoid technical jargon unless necessary.
-Consistency: Ensure responses are aligned in tone and style across all queries.`;
+Consistency: Ensure responses are aligned in tone and style across all queries.`
+      });
+      
+      // Add user message to chat history
+      const userMessage: ChatMessage = {
+        role: 'user',
+        parts: [{ text: prompt }]
+      };
+      setChatHistory((prev: ChatMessage[]) => [...prev, userMessage]);
 
       // Create chat session with history
       const chat = model.startChat({
@@ -579,12 +484,6 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
         }))
       });
 
-      // Debug: Log the conversation history being sent to Gemini
-      console.log('Chat history being sent to Gemini:', chatHistory.map(msg => ({
-        role: msg.role,
-        text: msg.parts[0].text
-      })));
-
       // Send message and get stream
       const result = await chat.sendMessageStream(prompt);
       
@@ -593,17 +492,63 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
         response += chunk.text();
       }
 
-      // Update chat history with model response
+      // Add model response to chat history
       const modelMessage: ChatMessage = {
         role: 'model',
         parts: [{ text: response }]
       };
       setChatHistory((prev: ChatMessage[]) => [...prev, modelMessage]);
 
+      // Check for scheme detection in user message
+      const detectedScheme = SchemeService.detectScheme(prompt);
+      if (detectedScheme) {
+        const schemeMessages = {
+          hindi: `मैंने "${detectedScheme.title}" योजना का पता लगाया है। मैं आपको योजनाओं टैब में ले जा रहा हूं।`,
+          english: `I detected the "${detectedScheme.title}" scheme. I will direct you to it in the Schemes tab.`,
+          kannada: `ನಾನು "${detectedScheme.title}" ಯೋಜನೆಯನ್ನು ಪತ್ತೆ ಮಾಡಿದ್ದೇನೆ. ನಾನು ನಿಮ್ಮನ್ನು ಯೋಜನೆಗಳ ಟ್ಯಾಬ್‌ನಲ್ಲಿ ಅದಕ್ಕೆ ನಿರ್ದೇಶಿಸುತ್ತೇನೆ.`,
+          marathi: `मी "${detectedScheme.title}" योजना शोधली आहे. मी तुम्हाला योजना टॅबमध्ये त्याकडे निर्देश करतो.`,
+          punjabi: `ਮੈਂ "${detectedScheme.title}" ਯੋਜਨਾ ਦਾ ਪਤਾ ਲਗਾਇਆ ਹੈ. ਮੈਂ ਤੁਹਾਨੂੰ ਯੋਜਨਾਵਾਂ ਟੈਬ ਵਿੱਚ ਇਸ ਵੱਲ ਨਿਰਦੇਸ਼ ਕਰਾਂਗਾ.`,
+          gujarati: `મેં "${detectedScheme.title}" યોજના શોધી છે. હું તમને યોજનાઓ ટેબમાં તેની તરફ નિર્દેશ કરીશ.`,
+          bengali: `আমি "${detectedScheme.title}" প্রকল্পটি সনাক্ত করেছি। আমি আপনাকে প্রকল্প ট্যাবে এটি দেখাতে নিয়ে যাব।`
+        };
+        
+        const response = schemeMessages[selectedLanguage as keyof typeof schemeMessages] || schemeMessages.english;
+        
+        // Navigate to schemes tab with the detected scheme ID after speech completes
+        setTimeout(() => {
+          router.push({
+            pathname: '/schemes',
+            params: { 
+              schemeId: detectedScheme.id,
+              schemeName: detectedScheme.title 
+            }
+          });
+        }, 3000); // Increased delay to allow speech to complete
+        
+        return response;
+      }
+
+      // If Gemini response is a task marker, add the task and show confirmation
+      if (response.trim().startsWith('__TASK__:')) {
+        const taskText = response.replace(/^__TASK__:/, '').trim();
+        const taskData = taskService.parseTaskFromText(taskText);
+        const newTask = await taskService.addTask(taskData);
+        const confirmationMessages = {
+          hindi: `टास्क जोड़ दिया गया है: "${newTask.title}"। आप इसे टास्क टैब में देख सकते हैं।`,
+          english: `Task added: "${newTask.title}". You can view it in the Tasks tab.`,
+          kannada: `ಟಾಸ್ಕ್ ಸೇರಿಸಲಾಗಿದೆ: "${newTask.title}". ನೀವು ಅದನ್ನು ಟಾಸ್ಕ್ ಟ್ಯಾಬ್‌ನಲ್ಲಿ ನೋಡಬಹುದು.`,
+          marathi: `कार्य जोडले आहे: "${newTask.title}". तुम्ही ते कार्य टॅबमध्ये पाहू शकता.`,
+          punjabi: `ਟਾਸਕ ਜੋੜਿਆ ਗਿਆ ਹੈ: "${newTask.title}". ਤੁਸੀਂ ਇਸਨੂੰ ਟਾਸਕ ਟੈਬ ਵਿੱਚ ਦੇਖ ਸਕਦੇ ਹੋ.`,
+          gujarati: `કાર્ય ઉમેર્યું છે: "${newTask.title}". તમે તેને કાર્ય ટેબમાં જોઈ શકો છો.`,
+          bengali: `কাজ যোগ করা হয়েছে: "${newTask.title}". আপনি এটি কাজ ট্যাবে দেখতে পারেন.`
+        };
+        return confirmationMessages[selectedLanguage as keyof typeof confirmationMessages] || confirmationMessages.english;
+      }
+
       return response;
     } catch (error) {
-      console.error('Error in getGeminiResponse:', error);
-      return 'Sorry, I encountered an error while processing your request. Please try again.';
+      console.error('Error getting Gemini response:', error);
+      return 'मुझे क्षमा करें, मैं अभी आपकी सहायता नहीं कर पा रहा हूं। कृपया कुछ देर बाद पुनः प्रयास करें।';
     }
   };
 
@@ -626,7 +571,7 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
     }
   };
 
-  const processCommand = useCallback(async (command: string, language: string = selectedLanguage) => {
+  const processCommand = async (command: string, language: string = selectedLanguage) => {
     try {
       setIsProcessing(true);
       const response = await getGeminiResponse(command);
@@ -641,7 +586,7 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
     } finally {
       setIsProcessing(false);
     }
-  }, [selectedLanguage, getGeminiResponse, isMuted]);
+  };
 
   const parseResponse = (response: string) => {
     if (!response) return { type: '', action: '', details: '' };
@@ -730,31 +675,15 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
   const speakResponse = async (text: string) => {
     try {
       if (voiceService.current) {
-        console.log('Original text for speech:', text);
+        // Split text into sentences for better speech handling
+        const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
         
-        // Remove only emojis, keep most special characters
-        const cleanText = text
-          .replace(/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '') // Remove emojis only
-          .replace(/\s+/g, ' ') // Replace multiple spaces with single space
-          .trim();
-        
-        console.log('Cleaned text for speech:', cleanText);
-        
-        if (cleanText.length === 0) {
-          console.log('No text to speak after cleaning');
-          return;
+        // Speak each sentence with a small delay
+        for (const sentence of sentences) {
+          await voiceService.current.speak(sentence.trim());
+          // Add a small pause between sentences
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
-        
-        // Add a small delay before starting speech to prevent glitches
-        await new Promise(resolve => setTimeout(resolve, 50));
-        
-        console.log('Starting speech for:', cleanText);
-        // Speak the entire text at once
-        await voiceService.current.speak(cleanText);
-        
-        console.log('Speech completed');
-      } else {
-        console.log('Voice service not available');
       }
     } catch (error) {
       console.error('Error speaking response:', error);
@@ -766,7 +695,6 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
     setChatHistory([]);
     setAssistantResponse('');
     setHasIntroduced(false); // Reset introduction state
-    setCurrentContext(''); // Reset context
   };
 
   // Debug function to check available voices
@@ -915,7 +843,13 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
             ))}
           </ScrollView>
           
-
+          {/* Test Kannada Button */}
+          <TouchableOpacity
+            style={[styles.testButton, { backgroundColor: accentColor }]}
+            onPress={() => voiceService.current?.testKannadaSpeech('ನಮಸ್ಕಾರ! ನಾನು ಸ್ಮಾರ್ಟ್ ಭಾರತ')}
+          >
+            <Text style={styles.testButtonText}>Test Kannada (Hindi Voice)</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Voice Input Section */}
@@ -1114,12 +1048,27 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
   );
 }
 
-const CommandItem = ({ icon, text, color }: { icon: string; text: string; color: string }) => (
-  <View style={styles.commandItem}>
-    <MaterialIcons name={icon as any} size={20} color={color} />
-    <Text style={[styles.commandText, { color }]}>{text}</Text>
-  </View>
-);
+interface CommandItemProps {
+  icon: string;
+  text: string;
+  color: string;
+}
+
+const CommandItem = ({ icon, text = '', color }: CommandItemProps) => {
+  // Ensure text is always a string and not null/undefined
+  const displayText = typeof text === 'string' ? text : '';
+  
+  return (
+    <View style={styles.commandItem}>
+      <View style={styles.iconContainer}>
+        <MaterialIcons name={icon as any} size={20} color={color} />
+      </View>
+      <View style={styles.textContainer}>
+        <Text style={[styles.commandText, { color }]}>{displayText}</Text>
+      </View>
+    </View>
+  );
+};
 
 const ChatMessage = ({ message, index }: { message: ChatMessage; index: number }) => {
   const opacity = useRef(new Animated.Value(0)).current;
@@ -1276,6 +1225,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     paddingVertical: 8,
+  },
+  iconContainer: {
+    width: 24,
+    alignItems: 'center',
+  },
+  textContainer: {
+    flex: 1,
   },
   commandText: {
     fontSize: 16,

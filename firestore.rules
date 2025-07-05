@@ -1,0 +1,18 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow read/write access on all documents to any user signed in to the application
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+      
+      // For development, you can use these rules to allow all access
+      // allow read, write: if true;
+      
+      // For production, you should implement more specific rules like:
+      // allow read: if request.auth != null;
+      // allow write: if request.auth != null && 
+      //   (request.resource.data.userId == request.auth.uid || 
+      //    get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true);
+    }
+  }
+}
