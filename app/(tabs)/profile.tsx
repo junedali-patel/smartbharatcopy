@@ -477,16 +477,25 @@ export default function ProfileScreen() {
         {/* Enhanced Profile Header */}
         <View style={[styles.header, { backgroundColor: cardBackground }]}>
           <View style={styles.headerContent}>
-            <Text style={[styles.headerTitle, { color: textColor }]}>My Profile</Text>
-            <TouchableOpacity
-              style={[styles.editButton, { backgroundColor: editing ? '#e74c3c' : accentColor }]}
-              onPress={() => setEditing(!editing)}
-            >
-              <FontAwesome name={editing ? "times" : "edit"} size={16} color="#fff" />
-              <Text style={styles.editButtonText}>
-                {editing ? 'Cancel' : 'Edit'}
-              </Text>
-            </TouchableOpacity>
+            <View style={{ flex: 1 }} />
+            <Text style={[styles.headerTitle, { color: textColor, textAlign: 'center' }]}>My Profile</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TouchableOpacity
+                style={[styles.settingsButton, { marginRight: 10 }]}
+                onPress={() => router.push('/settings')}
+              >
+                <FontAwesome name="cog" size={24} color={textColor} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.editButton, { backgroundColor: editing ? '#e74c3c' : accentColor }]}
+                onPress={() => setEditing(!editing)}
+              >
+                <FontAwesome name={editing ? "times" : "edit"} size={16} color="#fff" />
+                <Text style={styles.editButtonText}>
+                  {editing ? 'Cancel' : 'Edit'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -795,6 +804,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
+  },
+  settingsButton: {
+    padding: 8,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   editButton: {
     flexDirection: 'row',

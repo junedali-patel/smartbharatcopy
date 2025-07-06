@@ -10,13 +10,22 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        tabBarInactiveTintColor: '#9ca3af',
         tabBarStyle: {
-          backgroundColor: 'transparent', // Make tab bar background fully transparent
-          borderTopColor: 'transparent',  // Remove top border
-          elevation: 0,                   // Remove shadow on Android
-          shadowOpacity: 0,               // Remove shadow on iOS
+          backgroundColor: 'transparent',
+          borderTopColor: 'transparent',
+          elevation: 0,
+          shadowOpacity: 0,
+          height: 60,
+          paddingBottom: 8,
         },
-        headerShown: false, // Hide the header completely
+        tabBarLabelStyle: {
+          fontSize: 12,
+          marginTop: -4,
+        },
+        tabBarItemStyle: {
+          paddingVertical: 4,
+        },
       }}>
       <Tabs.Screen
         name="index"
@@ -51,13 +60,6 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color }: { color: string }) => <FontAwesome name="user" size={20} color="#333333" />,
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: 'Settings',
-          tabBarIcon: ({ color }: { color: string }) => <FontAwesome name="cog" size={20} color="#333333" />,
         }}
       />
     </Tabs>
