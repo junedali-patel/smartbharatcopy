@@ -2370,11 +2370,7 @@ const styles = StyleSheet.create({
   weatherModalSection: {
     marginBottom: 20,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
+
   weatherMainInfo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -2459,25 +2455,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginBottom: 2,
   },
-  loadingContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 14,
-  },
-  errorContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  errorText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginTop: 10,
-  },
+
   errorSubtext: {
     fontSize: 14,
     marginTop: 5,

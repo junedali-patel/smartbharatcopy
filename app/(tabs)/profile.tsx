@@ -19,10 +19,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeColor } from '../../hooks/useThemeColor';
 import { auth, db } from '../../services/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
-interface UserProfile {
+import { FieldValue } from 'firebase/firestore';
+
+type UserProfile = {
   name: string;
   email: string;
   phone: string;
@@ -33,8 +35,8 @@ interface UserProfile {
   occupation: string;
   interests: string[];
   avatarUrl: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: string | FieldValue;
+  updatedAt: string | FieldValue;
 }
 
 const INTEREST_OPTIONS = [
@@ -368,23 +370,65 @@ export default function ProfileScreen() {
   };
 
   const updateProfile = async (updates: Partial<UserProfile>) => {
-    if (!auth.currentUser) return;
-
+    if (!auth.currentUser) {
+      Alert.alert('Error', 'You must be logged in to update your profile');
+      return;
+    }
+  
     try {
       setSaving(true);
+      setError(null);
+      
+      // Validate required fields if needed
+      if (updates.name && updates.name.trim().length < 2) {
+        throw new Error('Name must be at least 2 characters long');
+      }
+  
       const userRef = doc(db, 'users', auth.currentUser.uid);
-      const profileUpdates = {
-        ...updates,
-        interests: Array.isArray(updates.interests) ? updates.interests : [],
-        updatedAt: new Date().toISOString()
-      };
-      await updateDoc(userRef, profileUpdates);
-      setProfile(prev => ({ ...prev, ...profileUpdates }));
+      
+      // Only update if there are actual changes
+      const hasChanges = Object.keys(updates).length > 0;
+      
+      if (hasChanges) {
+        console.log('Updating profile with changes:', updates);
+        
+        // Prepare update data with timestamps
+        const updateData: Partial<UserProfile> = {
+          ...updates,
+          updatedAt: serverTimestamp(),
+        };
+        
+        // If this is a new user, set the createdAt timestamp
+        if (!profile?.createdAt) {
+          updateData.createdAt = serverTimestamp();
+        }
+        
+        // Use setDoc with merge: true to create or update the document
+        await setDoc(userRef, updateData, { merge: true });
+        
+        // Update local state with the new data
+        setProfile(prev => ({
+          ...prev,
+          ...updates,
+          updatedAt: new Date().toISOString(),
+          // Only update createdAt if it's a new profile
+          ...(!prev?.createdAt && { createdAt: new Date().toISOString() })
+        }));
+        
+        // Show success message if not in development mode
+        if (!__DEV__) {
+          Alert.alert('Success', 'Profile updated successfully!');
+        }
+      } else {
+        console.log('No changes to save');
+      }
+
       setEditing(false);
-      Alert.alert('Success', 'Profile updated successfully!');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating profile:', error);
-      Alert.alert('Error', 'Failed to update profile');
+      const errorMessage = error.message || 'Failed to update profile. Please try again.';
+      setError(errorMessage);
+      Alert.alert('Error', errorMessage);
     } finally {
       setSaving(false);
     }

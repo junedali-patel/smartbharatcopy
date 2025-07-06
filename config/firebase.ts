@@ -1,7 +1,8 @@
-import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getFirestore, Firestore } from 'firebase/firestore';
-import { getAuth, Auth } from 'firebase/auth';
-import { getMessaging, Messaging } from 'firebase/messaging';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
+import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import { getMessaging } from 'firebase/messaging';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -16,32 +17,32 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-let app: FirebaseApp;
-let db: Firestore;
-let auth: Auth;
-let messaging: Messaging | null = null;
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
+// Initialize Firestore
+const db = getFirestore(app);
+
+// Initialize Auth with AsyncStorage persistence
+let auth;
 try {
-  if (getApps().length === 0) {
-    app = initializeApp(firebaseConfig);
-  } else {
-    app = getApp();
-  }
-
-  // Initialize Firestore
-  db = getFirestore(app);
-
-  // Initialize Auth
-  auth = getAuth(app);
-
-  // Initialize Messaging (only in browser environment)
-  if (typeof window !== 'undefined') {
-    messaging = getMessaging(app);
-  }
+  auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(AsyncStorage)
+  });
 } catch (error) {
-  console.error('Error initializing Firebase:', error);
-  throw error;
+  // If already initialized, get the existing instance
+  const { getAuth } = require('firebase/auth');
+  auth = getAuth(app);
+}
+
+// Initialize Messaging (only in browser environment)
+let messaging = null;
+if (typeof window !== 'undefined') {
+  try {
+    messaging = getMessaging(app);
+  } catch (error) {
+    console.warn('Failed to initialize Firebase Messaging:', error);
+  }
 }
 
 export { db, auth, messaging };
-export default app; 
+export default app;
