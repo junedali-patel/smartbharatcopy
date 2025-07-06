@@ -1,11 +1,10 @@
 import { getFirestore, collection, getDocs } from 'firebase/firestore';
 import * as fs from 'fs';
 import * as path from 'path';
-import app from '../config/firebase';
+import { auth, db } from '../services/firebase';
 
 async function fetchSchemesToJson() {
-  // Use the already-initialized Firebase app
-  const db = getFirestore(app);
+  // Use the already-initialized Firebase db instance
 
   // Fetch all schemes
   const schemesCol = collection(db, 'schemes');

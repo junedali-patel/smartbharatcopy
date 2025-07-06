@@ -5,10 +5,11 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { AuthProvider } from '../contexts/AuthContext';
-import app from '../config/firebase'; // Import Firebase app instance
+import { LanguageProvider } from '../contexts/LanguageContext';
+import { auth, db } from '../services/firebase'; // Import Firebase instances
 
 // Ensure Firebase is initialized
-if (!app || typeof app !== 'object') {
+if (!auth || !db) {
   throw new Error('Firebase initialization failed');
 }
 
@@ -49,20 +50,22 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            header: () => null, // Remove header completely
-            headerStyle: { backgroundColor: 'transparent', elevation: 0, shadowOpacity: 0 }, // Remove black color/shadow
-            headerTitle: '', // Remove title
-          }}
-        >
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="auth/login" />
-          <Stack.Screen name="auth/signup" />
-        </Stack>
-      </ThemeProvider>
+      <LanguageProvider>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              header: () => null, // Remove header completely
+              headerStyle: { backgroundColor: 'transparent' }, // Remove black color/shadow
+              headerTitle: '', // Remove title
+            }}
+          >
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="auth/login" />
+            <Stack.Screen name="auth/signup" />
+          </Stack>
+        </ThemeProvider>
+      </LanguageProvider>
     </AuthProvider>
   );
 }

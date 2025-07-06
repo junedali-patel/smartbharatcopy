@@ -1,4 +1,4 @@
-export const GEMINI_API_KEY = 'AIzaSyCyvQpTmL0aaYNcwpFNpPXURsz4XI8DzqY';
+export const GEMINI_API_KEY = 'AIzaSyBlfOPGjxA_vF-smaFGhqj1eo8ChK67jgU';
 
 export const isGeminiAvailable = () => {
   return !!GEMINI_API_KEY;

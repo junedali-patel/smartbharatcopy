@@ -8,7 +8,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeColor } from '../../hooks/useThemeColor';
 import VoiceService from '../../services/VoiceService';
 import { GEMINI_API_KEY, isGeminiAvailable } from '../../constants/config';
-import TaskService, { Task } from '../../services/taskService';
+import FirebaseTaskService, { Task } from '../../services/firebaseTaskService';
+import NotificationService from '../../services/notificationService';
+import UserService from '../../services/userService';
+import { auth } from '../../services/firebase';
 
 // Initialize Gemini API
 const genAI = isGeminiAvailable() ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
@@ -46,23 +49,102 @@ export default function TasksScreen() {
 
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'farming' | 'personal' | 'general'>('all');
   const categories: ('all' | 'farming' | 'personal' | 'general')[] = ['all', 'farming', 'personal', 'general'];
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  // Initialize TaskService
-  const taskService = useMemo(() => TaskService.getInstance(), []);
+  // Initialize FirebaseTaskService
+  const taskService = useMemo(() => FirebaseTaskService.getInstance(), []);
 
   useEffect(() => {
+    console.log('TasksScreen: Component mounted, setting up task listener');
+    
+    // Initialize notifications and register FCM tokens
+    const initializeNotifications = async () => {
+      try {
+        const notificationService = NotificationService.getInstance();
+        const userService = UserService.getInstance();
+        
+        // Request notification permissions
+        const hasPermission = await notificationService.checkNotificationPermissions();
+        if (!hasPermission) {
+          const granted = await notificationService.requestPermissions();
+          if (!granted) {
+            console.log('Notification permissions not granted');
+            return;
+          }
+        }
+        
+        // Register FCM tokens with user profile
+        await userService.registerFCMToken();
+        console.log('TasksScreen: Notifications initialized and FCM tokens registered');
+      } catch (error) {
+        console.error('TasksScreen: Error initializing notifications:', error);
+      }
+    };
+    
+    initializeNotifications();
+    
     // Subscribe to task updates from TaskService
     const handleTaskUpdate = (updatedTasks: Task[]) => {
+      console.log('TasksScreen: Received task update:', updatedTasks.length, 'tasks');
       setTasks([...updatedTasks]); // Force a new array reference
     };
 
-    taskService.addListener(handleTaskUpdate);
+    // Add listener with error handling
+    try {
+      taskService.addListener(handleTaskUpdate);
+      console.log('TasksScreen: Listener added successfully');
+    } catch (error) {
+      console.error('TasksScreen: Error adding listener:', error);
+    }
+
+    // Also manually load tasks to ensure we have initial data
+    const loadInitialTasks = async () => {
+      try {
+        const initialTasks = await taskService.getTasks();
+        console.log('TasksScreen: Loaded initial tasks:', initialTasks.length);
+        setTasks(initialTasks);
+      } catch (error) {
+        console.error('TasksScreen: Error loading initial tasks:', error);
+        // If real-time listener fails, set up a fallback timer to refresh tasks
+        const refreshInterval = setInterval(async () => {
+          try {
+            const refreshedTasks = await taskService.getTasks();
+            setTasks(refreshedTasks);
+          } catch (refreshError) {
+            console.error('TasksScreen: Error in refresh interval:', refreshError);
+          }
+        }, 5000); // Refresh every 5 seconds as fallback
+        
+        // Cleanup interval on unmount
+        return () => clearInterval(refreshInterval);
+      }
+    };
+    
+    loadInitialTasks();
 
     // Cleanup listener on unmount
     return () => {
-      taskService.removeListener(handleTaskUpdate);
+      console.log('TasksScreen: Component unmounting, removing listener');
+      try {
+        taskService.removeListener(handleTaskUpdate);
+      } catch (error) {
+        console.error('TasksScreen: Error removing listener:', error);
+      }
     };
   }, [taskService]);
+
+  // Add a manual refresh function
+  const refreshTasks = async () => {
+    try {
+      console.log('TasksScreen: Manually refreshing tasks...');
+      const refreshedTasks = await taskService.getTasks();
+      console.log('TasksScreen: Refreshed tasks:', refreshedTasks.length);
+      setTasks(refreshedTasks);
+    } catch (error) {
+      console.error('TasksScreen: Error refreshing tasks:', error);
+      setError('Failed to load tasks. Please try again.');
+    }
+  };
 
   const { ongoingTasks, completedTasks } = useMemo(() => {
     const ongoing: Task[] = [];
@@ -104,9 +186,12 @@ export default function TasksScreen() {
   useEffect(() => {
     // Set up speech result callback
     voiceService.setOnSpeechResult((text) => {
-      setCurrentTranscript(text);
-      setLastSpeechTime(Date.now());
-      processCommand(text);
+      // Only process voice input if we're actively listening on the tasks screen
+      if (isListening) {
+        setCurrentTranscript(text);
+        setLastSpeechTime(Date.now());
+        processCommand(text);
+      }
     });
 
     // Set up speech end callback
@@ -119,10 +204,12 @@ export default function TasksScreen() {
     });
 
     return () => {
-      // Clean up
+      // Clean up - stop listening and clear callbacks when leaving this screen
       if (isListening) {
         voiceService.stopListening();
       }
+      voiceService.setOnSpeechResult(null);
+      voiceService.setOnSpeechEnd(null);
     };
   }, [isListening]);
 
@@ -253,6 +340,9 @@ export default function TasksScreen() {
             for (const completedTask of completedTasks) {
               await taskService.toggleTaskStatus(completedTask.id);
             }
+            
+            // Refresh tasks to show the updated status
+            await refreshTasks();
             
             if (completedTasks.length === 1) {
               setAssistantResponse(`Great! I've marked "${completedTasks[0].title}" as completed.`);
@@ -397,13 +487,52 @@ export default function TasksScreen() {
         }
         
         // Add the new task using TaskService
-        const newTaskData = taskService.parseTaskFromText(taskData.title);
+        console.log('TasksScreen: Chatbot task data from AI:', taskData);
+        
+        // Check if user is authenticated
+        const currentUser = auth.currentUser;
+        console.log('TasksScreen: Current user:', currentUser?.uid);
+        
+        if (!currentUser) {
+          console.error('TasksScreen: No authenticated user found');
+          setError('Please log in to add tasks.');
+          return;
+        }
+        
+        // Use the full command for parsing to get proper date handling
+        const newTaskData = taskService.parseTaskFromText(command);
         newTaskData.priority = taskData.priority || newTaskData.priority;
         newTaskData.category = taskData.category || newTaskData.category;
-        newTaskData.dueDate = taskData.dueDate || newTaskData.dueDate;
+        // Use the date from parseTaskFromText (which handles date keywords) instead of AI's date
+        // newTaskData.dueDate is already set correctly by parseTaskFromText
         newTaskData.dueTime = taskData.dueTime || newTaskData.dueTime;
         
-        await taskService.addTask(newTaskData);
+        console.log('TasksScreen: Final task data for Firebase:', newTaskData);
+        
+        try {
+          console.log('TasksScreen: Attempting to add task to Firebase...');
+          const addedTask = await taskService.addTask(newTaskData);
+          console.log('TasksScreen: Chatbot task added to Firebase:', addedTask);
+          
+          // Verify the task was actually added by fetching tasks again
+          const verificationTasks = await taskService.getTasks();
+          console.log('TasksScreen: Verification - total tasks in Firebase:', verificationTasks.length);
+          const foundTask = verificationTasks.find(t => t.id === addedTask.id);
+          console.log('TasksScreen: Verification - task found in Firebase:', !!foundTask);
+          
+          if (!foundTask) {
+            console.error('TasksScreen: Task was not found in Firebase after adding!');
+            setError('Task was not saved to database. Please try again.');
+            return;
+          }
+          
+          // Refresh tasks to show the newly added task
+          await refreshTasks();
+        } catch (addError) {
+          console.error('TasksScreen: Error adding chatbot task to Firebase:', addError);
+          setError('Failed to add task to database. Please try again.');
+          return;
+        }
         
         // Generate a response for the user
         const responsePrompt = `Generate a brief confirmation message for adding a task with the following details:
@@ -449,12 +578,19 @@ export default function TasksScreen() {
   const addTask = async () => {
     if (!newTask.trim()) return;
 
+    console.log('TasksScreen: Adding task:', newTask);
+
     try {
       setIsProcessing(true);
       setError(null);
 
       const taskData = taskService.parseTaskFromText(newTask);
-      await taskService.addTask(taskData);
+      
+      const addedTask = await taskService.addTask(taskData);
+      
+      // Refresh tasks to show the newly added task
+      await refreshTasks();
+      
       setNewTask('');
     } catch (error) {
       console.error('Error adding task:', error);
@@ -464,18 +600,22 @@ export default function TasksScreen() {
     }
   };
 
-  const toggleTaskStatus = async (taskId: number) => {
+  const toggleTaskStatus = async (taskId: string) => {
     try {
       await taskService.toggleTaskStatus(taskId);
+      // Refresh tasks to show the updated status
+      await refreshTasks();
     } catch (error) {
       console.error('Error toggling task status:', error);
       setError('Failed to update task. Please try again.');
     }
   };
 
-  const deleteTask = async (taskId: number) => {
+  const deleteTask = async (taskId: string) => {
     try {
       await taskService.deleteTask(taskId);
+      // Refresh tasks to show the deletion
+      await refreshTasks();
     } catch (error) {
       console.error('Error deleting task:', error);
       setError('Failed to delete task. Please try again.');
@@ -528,6 +668,43 @@ export default function TasksScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor }]}>
       <View style={[styles.header, { borderBottomColor: borderColor }]}>
         <Text style={[styles.headerTitle, { color: textColor }]}>Tasks</Text>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity 
+            style={[styles.refreshButton, { backgroundColor: accentColor }]}
+            onPress={refreshTasks}
+          >
+            <FontAwesome name="refresh" size={16} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.clearAllButton, { backgroundColor: '#dc3545' }]}
+            onPress={() => {
+              console.log('TasksScreen: Clear All button pressed');
+              console.log('TasksScreen: Showing custom confirmation dialog...');
+              setShowClearConfirm(true);
+            }}
+          >
+            <Text style={styles.clearAllButtonText}>Clear All</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.testNotificationButton, { backgroundColor: '#007bff' }]}
+            onPress={async () => {
+              console.log('TasksScreen: Test notification button pressed');
+              try {
+                const notificationService = NotificationService.getInstance();
+                await notificationService.showLocalNotification(
+                  'Test Notification',
+                  'This is a test notification from Smart Bharat!',
+                  { test: true }
+                );
+                console.log('TasksScreen: Test notification sent');
+              } catch (error) {
+                console.error('TasksScreen: Error sending test notification:', error);
+              }
+            }}
+          >
+            <Text style={styles.testNotificationButtonText}>Test Notification</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Voice Assistant Section */}
@@ -746,6 +923,49 @@ export default function TasksScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* Custom Clear All Confirmation Modal */}
+      {showClearConfirm && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Clear All Tasks</Text>
+            <Text style={styles.modalMessage}>
+              Are you sure you want to delete all tasks? This action cannot be undone.
+            </Text>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => {
+                  console.log('TasksScreen: Cancel pressed in custom modal');
+                  setShowClearConfirm(false);
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.clearButton]}
+                onPress={async () => {
+                  console.log('TasksScreen: Clear All option pressed in custom modal');
+                  try {
+                    console.log('TasksScreen: Starting clear all tasks...');
+                    await taskService.clearAllTasks();
+                    console.log('TasksScreen: Clear all tasks completed');
+                    await refreshTasks(); // Refresh the task list after clearing
+                    console.log('TasksScreen: Tasks refreshed after clearing');
+                    setShowClearConfirm(false);
+                  } catch (error) {
+                    console.error('Error clearing tasks:', error);
+                    setError('Failed to clear tasks. Please try again.');
+                    setShowClearConfirm(false);
+                  }
+                }}
+              >
+                <Text style={styles.clearButtonText}>Clear All</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -756,6 +976,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f9fa',
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     padding: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#e9ecef',
@@ -763,6 +986,45 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  refreshButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  testButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  clearAllButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  clearAllButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  testNotificationButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  testNotificationButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   inputContainer: {
     flexDirection: 'row',
@@ -998,5 +1260,60 @@ const styles = StyleSheet.create({
   },
   responseText: {
     fontSize: 12,
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    padding: 20,
+    borderRadius: 10,
+    width: '80%',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 12,
+  },
+  modalMessage: {
+    fontSize: 14,
+    marginBottom: 20,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  modalButton: {
+    padding: 12,
+    borderRadius: 6,
+    flex: 1,
+    marginHorizontal: 5,
+  },
+  cancelButton: {
+    backgroundColor: '#6c757d',
+  },
+  cancelButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  clearButton: {
+    backgroundColor: '#dc3545',
+  },
+  clearButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });

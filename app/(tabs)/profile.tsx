@@ -13,6 +13,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Dimensions,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeColor } from '../../hooks/useThemeColor';
@@ -48,12 +50,14 @@ const INTEREST_OPTIONS = [
   'Food & Cooking'
 ];
 
+const { width } = Dimensions.get('window');
+
 export default function ProfileScreen() {
-  const backgroundColor = '#ffffff';
+  const backgroundColor = '#f8f9fa';
   const cardBackground = '#ffffff';
-  const textColor = useThemeColor({ light: '#333333', dark: '#333333' }, 'text');
-  const accentColor = useThemeColor({ light: '#2E7D32', dark: '#2E7D32' }, 'tint');
-  const borderColor = '#e0e0e0';
+  const textColor = useThemeColor({ light: '#2c3e50', dark: '#2c3e50' }, 'text');
+  const accentColor = useThemeColor({ light: '#27ae60', dark: '#27ae60' }, 'tint');
+  const borderColor = '#e9ecef';
 
   const [profile, setProfile] = useState<UserProfile>({
     name: '',
@@ -71,20 +75,59 @@ export default function ProfileScreen() {
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
     console.log('ProfileScreen: Component mounted');
-    fetchUserProfile();
+    setIsMounted(true);
+    // Delay fetching profile to ensure component is fully mounted
+    const timer = setTimeout(() => {
+      fetchUserProfile();
+    }, 100);
+    
+    return () => {
+      clearTimeout(timer);
+      setIsMounted(false);
+    };
   }, []);
+
+  // Cleanup effect to prevent navigation after unmount
+  useEffect(() => {
+    return () => {
+      setIsMounted(false);
+    };
+  }, []);
+
+  const safeNavigate = (route: '/auth/login') => {
+    try {
+      if (isMounted) {
+        router.replace(route);
+      }
+    } catch (error) {
+      console.error('Navigation error:', error);
+      // Fallback: try to navigate after a short delay
+      setTimeout(() => {
+        try {
+          router.replace(route);
+        } catch (fallbackError) {
+          console.error('Fallback navigation failed:', fallbackError);
+        }
+      }, 100);
+    }
+  };
 
   const fetchUserProfile = async () => {
     try {
       console.log('ProfileScreen: Fetching user profile...');
       if (!auth.currentUser) {
         console.log('ProfileScreen: No current user, redirecting to login');
-        router.replace('/auth/login');
+        // Only navigate if component is mounted
+        if (isMounted) {
+          safeNavigate('/auth/login');
+        }
         return;
       }
 
@@ -128,47 +171,199 @@ export default function ProfileScreen() {
   };
 
   const handleSignOut = async () => {
+    console.log('ProfileScreen: Sign out button pressed');
+    
     try {
+      console.log('ProfileScreen: Starting Firebase sign out...');
       await auth.signOut();
+      console.log('ProfileScreen: Firebase sign out successful');
+      
+      // Navigate to login page
+      console.log('ProfileScreen: Navigating to login...');
       router.replace('/auth/login');
+      console.log('ProfileScreen: Navigation successful');
     } catch (error) {
-      console.error('Error signing out:', error);
-      Alert.alert('Error', 'Failed to sign out');
+      console.error('ProfileScreen: Error signing out:', error);
+      Alert.alert('Error', 'Failed to sign out. Please try again.');
     }
   };
 
   const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Please grant permission to access your photos');
+    try {
+      console.log('ProfileScreen: Requesting image picker permissions...');
+      
+      // Request permissions
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'Please grant permission to access your photos in Settings.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Settings', onPress: () => Linking.openSettings() }
+          ]
+        );
+        return;
+      }
+
+      console.log('ProfileScreen: Launching image picker...');
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        base64: Platform.OS === 'web', // Enable base64 for web
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        console.log('ProfileScreen: Image selected, uploading...');
+        
+        if (Platform.OS === 'web' && result.assets[0].base64) {
+          // For web, use base64 approach
+          await uploadImageFromBase64(result.assets[0].base64);
+        } else {
+          // For mobile, use URI approach
+          await uploadImage(result.assets[0].uri);
+        }
+      }
+    } catch (error) {
+      console.error('ProfileScreen: Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
+    }
+  };
+
+  const uploadImageFromBase64 = async (base64Data: string) => {
+    if (!auth.currentUser) {
+      Alert.alert('Error', 'User not authenticated');
       return;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.5,
-    });
+    try {
+      setUploadingImage(true);
+      console.log('ProfileScreen: Starting base64 image upload...');
 
-    if (!result.canceled) {
-      try {
-        setSaving(true);
-        const response = await fetch(result.assets[0].uri);
-        const blob = await response.blob();
-        const storage = getStorage();
-        const storageRef = ref(storage, `avatars/${auth.currentUser?.uid}`);
-        await uploadBytes(storageRef, blob);
-        const downloadURL = await getDownloadURL(storageRef);
-        
-        setProfile(prev => ({ ...prev, avatarUrl: downloadURL }));
-        await updateProfile({ avatarUrl: downloadURL });
-      } catch (error) {
-        console.error('Error uploading image:', error);
-        Alert.alert('Error', 'Failed to upload image');
-      } finally {
-        setSaving(false);
+      // For development, store locally to avoid CORS issues
+      if (__DEV__) {
+        console.log('ProfileScreen: Development mode - storing image locally');
+        const localImageUrl = `data:image/jpeg;base64,${base64Data}`;
+        setProfile(prev => ({ ...prev, avatarUrl: localImageUrl }));
+        await updateProfile({ avatarUrl: localImageUrl });
+        Alert.alert('Success', 'Profile picture updated successfully! (Development Mode)');
+        return;
       }
+
+      // For production, upload to Firebase Storage
+      console.log('ProfileScreen: Production mode - uploading to Firebase Storage');
+      
+      // Convert base64 to blob
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'image/jpeg' });
+
+      // Upload to Firebase Storage
+      const storage = getStorage();
+      const fileName = `avatars/${auth.currentUser.uid}_${Date.now()}.jpg`;
+      const storageRef = ref(storage, fileName);
+      
+      console.log('ProfileScreen: Uploading to Firebase Storage...');
+      const uploadResult = await uploadBytes(storageRef, blob);
+      console.log('ProfileScreen: Upload successful, getting download URL...');
+      
+      const downloadURL = await getDownloadURL(uploadResult.ref);
+      console.log('ProfileScreen: Download URL obtained:', downloadURL);
+
+      // Update profile with new avatar URL
+      await updateProfile({ avatarUrl: downloadURL });
+      setProfile(prev => ({ ...prev, avatarUrl: downloadURL }));
+      
+      Alert.alert('Success', 'Profile picture updated successfully!');
+    } catch (error) {
+      console.error('ProfileScreen: Error uploading image:', error);
+      Alert.alert('Upload Error', 'Failed to upload image. Please try again.');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const uploadImage = async (uri: string) => {
+    if (!auth.currentUser) {
+      Alert.alert('Error', 'User not authenticated');
+      return;
+    }
+
+    try {
+      setUploadingImage(true);
+      console.log('ProfileScreen: Starting image upload...');
+
+      // For development, store locally to avoid CORS issues
+      if (__DEV__) {
+        console.log('ProfileScreen: Development mode - storing image locally');
+        setProfile(prev => ({ ...prev, avatarUrl: uri }));
+        await updateProfile({ avatarUrl: uri });
+        Alert.alert('Success', 'Profile picture updated successfully! (Development Mode)');
+        return;
+      }
+
+      // For production, upload to Firebase Storage
+      console.log('ProfileScreen: Production mode - uploading to Firebase Storage');
+
+      // For web, we need to handle the blob conversion differently
+      let blob: Blob;
+      
+      if (Platform.OS === 'web') {
+        // For web, fetch the image and convert to blob
+        const response = await fetch(uri);
+        if (!response.ok) {
+          throw new Error('Failed to fetch image');
+        }
+        blob = await response.blob();
+      } else {
+        // For mobile, use the original approach
+        const response = await fetch(uri);
+        if (!response.ok) {
+          throw new Error('Failed to fetch image');
+        }
+        blob = await response.blob();
+      }
+
+      // Upload to Firebase Storage
+      const storage = getStorage();
+      const fileName = `avatars/${auth.currentUser.uid}_${Date.now()}.jpg`;
+      const storageRef = ref(storage, fileName);
+      
+      console.log('ProfileScreen: Uploading to Firebase Storage...');
+      const uploadResult = await uploadBytes(storageRef, blob);
+      console.log('ProfileScreen: Upload successful, getting download URL...');
+      
+      const downloadURL = await getDownloadURL(uploadResult.ref);
+      console.log('ProfileScreen: Download URL obtained:', downloadURL);
+
+      // Update profile with new avatar URL
+      await updateProfile({ avatarUrl: downloadURL });
+      setProfile(prev => ({ ...prev, avatarUrl: downloadURL }));
+      
+      Alert.alert('Success', 'Profile picture updated successfully!');
+    } catch (error) {
+      console.error('ProfileScreen: Error uploading image:', error);
+      
+      // More specific error handling
+      if (error instanceof Error) {
+        if (error.message.includes('CORS')) {
+          Alert.alert('Upload Error', 'CORS error detected. This is a development issue. The image upload will work in production builds.');
+        } else if (error.message.includes('permission')) {
+          Alert.alert('Permission Error', 'Storage permission denied. Please check your Firebase configuration.');
+        } else {
+          Alert.alert('Upload Error', `Failed to upload image: ${error.message}`);
+        }
+      } else {
+        Alert.alert('Upload Error', 'Failed to upload image. Please try again.');
+      }
+    } finally {
+      setUploadingImage(false);
     }
   };
 
@@ -186,6 +381,7 @@ export default function ProfileScreen() {
       await updateDoc(userRef, profileUpdates);
       setProfile(prev => ({ ...prev, ...profileUpdates }));
       setEditing(false);
+      Alert.alert('Success', 'Profile updated successfully!');
     } catch (error) {
       console.error('Error updating profile:', error);
       Alert.alert('Error', 'Failed to update profile');
@@ -218,7 +414,7 @@ export default function ProfileScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor }]}>
         <View style={styles.errorContainer}>
-          <FontAwesome name="exclamation-triangle" size={48} color="#e53935" />
+          <FontAwesome name="exclamation-triangle" size={48} color="#e74c3c" />
           <Text style={[styles.errorText, { color: textColor }]}>{error}</Text>
           <TouchableOpacity
             style={[styles.retryButton, { backgroundColor: accentColor }]}
@@ -233,46 +429,75 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Profile Header */}
-        <View style={[styles.header, { borderBottomColor: borderColor }]}>
-          <Text style={[styles.headerTitle, { color: textColor }]}>Profile</Text>
-          <TouchableOpacity
-            style={[styles.editButton, { backgroundColor: editing ? '#e53935' : accentColor }]}
-            onPress={() => setEditing(!editing)}
-          >
-            <Text style={styles.editButtonText}>
-              {editing ? 'Cancel' : 'Edit'}
-            </Text>
-          </TouchableOpacity>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Enhanced Profile Header */}
+        <View style={[styles.header, { backgroundColor: cardBackground }]}>
+          <View style={styles.headerContent}>
+            <Text style={[styles.headerTitle, { color: textColor }]}>My Profile</Text>
+            <TouchableOpacity
+              style={[styles.editButton, { backgroundColor: editing ? '#e74c3c' : accentColor }]}
+              onPress={() => setEditing(!editing)}
+            >
+              <FontAwesome name={editing ? "times" : "edit"} size={16} color="#fff" />
+              <Text style={styles.editButtonText}>
+                {editing ? 'Cancel' : 'Edit'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Avatar Section */}
-        <View style={styles.avatarSection}>
+        {/* Enhanced Avatar Section */}
+        <View style={[styles.avatarSection, { backgroundColor: cardBackground }]}>
           <TouchableOpacity
             style={[styles.avatarContainer, { borderColor }]}
             onPress={editing ? pickImage : undefined}
-            disabled={!editing}
+            disabled={!editing || uploadingImage}
           >
-            {profile.avatarUrl ? (
+            {profile.avatarUrl && !profile.avatarUrl.includes('firebasestorage.googleapis.com') ? (
               <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} />
             ) : (
-              <FontAwesome name="user-circle" size={80} color={accentColor} />
+              <View style={styles.avatarPlaceholder}>
+                <FontAwesome name="user-circle" size={60} color={accentColor} />
+                <Text style={[styles.avatarPlaceholderText, { color: textColor }]}>
+                  {profile.name ? profile.name.charAt(0).toUpperCase() : 'U'}
+                </Text>
+              </View>
             )}
-            {editing && (
+            {editing && !uploadingImage && (
               <View style={styles.avatarOverlay}>
                 <FontAwesome name="camera" size={24} color="#fff" />
+                <Text style={styles.avatarOverlayText}>Tap to change</Text>
+              </View>
+            )}
+            {uploadingImage && (
+              <View style={styles.avatarOverlay}>
+                <ActivityIndicator size="large" color="#fff" />
+                <Text style={styles.avatarOverlayText}>Uploading...</Text>
               </View>
             )}
           </TouchableOpacity>
-          {saving && (
-            <ActivityIndicator size="small" color={accentColor} style={styles.avatarLoading} />
-          )}
+          
+          <View style={styles.profileInfo}>
+            <Text style={[styles.profileName, { color: textColor }]}>
+              {profile.name || 'Your Name'}
+            </Text>
+            <Text style={[styles.profileEmail, { color: '#7f8c8d' }]}>
+              {profile.email}
+            </Text>
+            {profile.occupation && (
+              <Text style={[styles.profileOccupation, { color: accentColor }]}>
+                {profile.occupation}
+              </Text>
+            )}
+          </View>
         </View>
 
-        {/* Personal Information */}
-        <View style={[styles.section, { borderColor }]}>
-          <Text style={[styles.sectionTitle, { color: textColor }]}>Personal Information</Text>
+        {/* Personal Information Card */}
+        <View style={[styles.card, { backgroundColor: cardBackground }]}>
+          <View style={styles.cardHeader}>
+            <FontAwesome name="user" size={20} color={accentColor} />
+            <Text style={[styles.cardTitle, { color: textColor }]}>Personal Information</Text>
+          </View>
           
           <View style={styles.inputGroup}>
             <Text style={[styles.label, { color: textColor }]}>Full Name</Text>
@@ -282,16 +507,18 @@ export default function ProfileScreen() {
               onChangeText={(text) => setProfile(prev => ({ ...prev, name: text }))}
               editable={editing}
               placeholder="Enter your full name"
+              placeholderTextColor="#bdc3c7"
             />
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={[styles.label, { color: textColor }]}>Email</Text>
             <TextInput
-              style={[styles.input, { color: textColor, borderColor }]}
+              style={[styles.input, { color: textColor, borderColor, backgroundColor: '#f8f9fa' }]}
               value={profile.email}
               editable={false}
               placeholder="Your email address"
+              placeholderTextColor="#bdc3c7"
             />
           </View>
 
@@ -303,6 +530,7 @@ export default function ProfileScreen() {
               onChangeText={(text) => setProfile(prev => ({ ...prev, phone: text }))}
               editable={editing}
               placeholder="Enter your phone number"
+              placeholderTextColor="#bdc3c7"
               keyboardType="phone-pad"
             />
           </View>
@@ -315,13 +543,17 @@ export default function ProfileScreen() {
               onChangeText={(text) => setProfile(prev => ({ ...prev, occupation: text }))}
               editable={editing}
               placeholder="Enter your occupation"
+              placeholderTextColor="#bdc3c7"
             />
           </View>
         </View>
 
-        {/* Address Information */}
-        <View style={[styles.section, { borderColor }]}>
-          <Text style={[styles.sectionTitle, { color: textColor }]}>Address Information</Text>
+        {/* Address Information Card */}
+        <View style={[styles.card, { backgroundColor: cardBackground }]}>
+          <View style={styles.cardHeader}>
+            <FontAwesome name="map-marker" size={20} color={accentColor} />
+            <Text style={[styles.cardTitle, { color: textColor }]}>Address Information</Text>
+          </View>
           
           <View style={styles.inputGroup}>
             <Text style={[styles.label, { color: textColor }]}>Address</Text>
@@ -331,30 +563,36 @@ export default function ProfileScreen() {
               onChangeText={(text) => setProfile(prev => ({ ...prev, address: text }))}
               editable={editing}
               placeholder="Enter your address"
+              placeholderTextColor="#bdc3c7"
               multiline
+              numberOfLines={3}
             />
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: textColor }]}>City</Text>
-            <TextInput
-              style={[styles.input, { color: textColor, borderColor }]}
-              value={profile.city}
-              onChangeText={(text) => setProfile(prev => ({ ...prev, city: text }))}
-              editable={editing}
-              placeholder="Enter your city"
-            />
-          </View>
+          <View style={styles.row}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+              <Text style={[styles.label, { color: textColor }]}>City</Text>
+              <TextInput
+                style={[styles.input, { color: textColor, borderColor }]}
+                value={profile.city}
+                onChangeText={(text) => setProfile(prev => ({ ...prev, city: text }))}
+                editable={editing}
+                placeholder="City"
+                placeholderTextColor="#bdc3c7"
+              />
+            </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: textColor }]}>State</Text>
-            <TextInput
-              style={[styles.input, { color: textColor, borderColor }]}
-              value={profile.state}
-              onChangeText={(text) => setProfile(prev => ({ ...prev, state: text }))}
-              editable={editing}
-              placeholder="Enter your state"
-            />
+            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+              <Text style={[styles.label, { color: textColor }]}>State</Text>
+              <TextInput
+                style={[styles.input, { color: textColor, borderColor }]}
+                value={profile.state}
+                onChangeText={(text) => setProfile(prev => ({ ...prev, state: text }))}
+                editable={editing}
+                placeholder="State"
+                placeholderTextColor="#bdc3c7"
+              />
+            </View>
           </View>
 
           <View style={styles.inputGroup}>
@@ -365,14 +603,18 @@ export default function ProfileScreen() {
               onChangeText={(text) => setProfile(prev => ({ ...prev, pincode: text }))}
               editable={editing}
               placeholder="Enter your pincode"
+              placeholderTextColor="#bdc3c7"
               keyboardType="number-pad"
             />
           </View>
         </View>
 
-        {/* Interests */}
-        <View style={[styles.section, { borderColor }]}>
-          <Text style={[styles.sectionTitle, { color: textColor }]}>Interests</Text>
+        {/* Interests Card */}
+        <View style={[styles.card, { backgroundColor: cardBackground }]}>
+          <View style={styles.cardHeader}>
+            <FontAwesome name="heart" size={20} color={accentColor} />
+            <Text style={[styles.cardTitle, { color: textColor }]}>Interests</Text>
+          </View>
           <View style={styles.interestsContainer}>
             {INTEREST_OPTIONS.map((interest) => (
               <TouchableOpacity
@@ -382,8 +624,8 @@ export default function ProfileScreen() {
                   {
                     backgroundColor: profile.interests.includes(interest)
                       ? accentColor
-                      : '#f5f5f5',
-                    borderColor
+                      : '#f8f9fa',
+                    borderColor: profile.interests.includes(interest) ? accentColor : borderColor
                   }
                 ]}
                 onPress={() => editing && toggleInterest(interest)}
@@ -406,52 +648,55 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Settings Section */}
-        <View style={[styles.section, { borderColor }]}>
-          <Text style={[styles.sectionTitle, { color: textColor }]}>Settings</Text>
+        {/* Settings Card */}
+        <View style={[styles.card, { backgroundColor: cardBackground }]}>
+          <View style={styles.cardHeader}>
+            <FontAwesome name="cog" size={20} color={accentColor} />
+            <Text style={[styles.cardTitle, { color: textColor }]}>Settings</Text>
+          </View>
           
           <TouchableOpacity 
             style={[styles.settingItem, { borderColor }]}
-            onPress={() => {/* Handle notifications settings */}}
+            onPress={() => Alert.alert('Coming Soon', 'Notifications settings will be available soon!')}
           >
             <View style={styles.settingContent}>
               <FontAwesome name="bell-o" size={22} color={textColor} />
               <Text style={[styles.settingText, { color: textColor }]}>Notifications</Text>
             </View>
-            <FontAwesome name="angle-right" size={20} color={textColor} />
+            <FontAwesome name="angle-right" size={20} color="#bdc3c7" />
           </TouchableOpacity>
           
           <TouchableOpacity 
             style={[styles.settingItem, { borderColor }]}
-            onPress={() => {/* Handle privacy settings */}}
+            onPress={() => Alert.alert('Coming Soon', 'Privacy settings will be available soon!')}
           >
             <View style={styles.settingContent}>
               <FontAwesome name="shield" size={22} color={textColor} />
               <Text style={[styles.settingText, { color: textColor }]}>Privacy</Text>
             </View>
-            <FontAwesome name="angle-right" size={20} color={textColor} />
+            <FontAwesome name="angle-right" size={20} color="#bdc3c7" />
           </TouchableOpacity>
           
           <TouchableOpacity 
             style={[styles.settingItem, { borderColor }]}
-            onPress={() => {/* Handle language settings */}}
+            onPress={() => Alert.alert('Coming Soon', 'Language settings will be available soon!')}
           >
             <View style={styles.settingContent}>
               <FontAwesome name="globe" size={22} color={textColor} />
               <Text style={[styles.settingText, { color: textColor }]}>Language</Text>
             </View>
-            <FontAwesome name="angle-right" size={20} color={textColor} />
+            <FontAwesome name="angle-right" size={20} color="#bdc3c7" />
           </TouchableOpacity>
           
           <TouchableOpacity 
             style={[styles.settingItem, { borderColor }]}
-            onPress={() => {/* Handle help & support */}}
+            onPress={() => Alert.alert('Coming Soon', 'Help & Support will be available soon!')}
           >
             <View style={styles.settingContent}>
               <FontAwesome name="life-ring" size={22} color={textColor} />
               <Text style={[styles.settingText, { color: textColor }]}>Help & Support</Text>
             </View>
-            <FontAwesome name="angle-right" size={20} color={textColor} />
+            <FontAwesome name="angle-right" size={20} color="#bdc3c7" />
           </TouchableOpacity>
         </View>
 
@@ -465,7 +710,10 @@ export default function ProfileScreen() {
             {saving ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.saveButtonText}>Save Changes</Text>
+              <>
+                <FontAwesome name="save" size={16} color="#fff" />
+                <Text style={styles.saveButtonText}>Save Changes</Text>
+              </>
             )}
           </TouchableOpacity>
         )}
@@ -475,7 +723,8 @@ export default function ProfileScreen() {
           style={[styles.signOutButton, { borderColor }]}
           onPress={handleSignOut}
         >
-          <Text style={[styles.signOutText, { color: '#e53935' }]}>Sign Out</Text>
+          <FontAwesome name="sign-out" size={16} color="#e74c3c" />
+          <Text style={[styles.signOutText, { color: '#e74c3c' }]}>Sign Out</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -490,49 +739,74 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   header: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+  },
+  headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
   },
   editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
+    gap: 8,
   },
   editButtonText: {
     color: '#fff',
     fontWeight: '600',
   },
   avatarSection: {
+    flexDirection: 'row',
     alignItems: 'center',
     padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
   },
   avatarContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
+    position: 'relative',
   },
   avatar: {
     width: '100%',
     height: '100%',
   },
+  avatarPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarPlaceholderText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginTop: 4,
+  },
   avatarOverlay: {
     position: 'absolute',
     width: '100%',
     height: '100%',
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  avatarOverlayText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginTop: 4,
   },
   avatarLoading: {
     position: 'absolute',
@@ -541,23 +815,50 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
   },
-  section: {
-    marginTop: 16,
+  profileInfo: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  profileName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  profileEmail: {
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  profileOccupation: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  card: {
+    margin: 16,
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 16,
+    gap: 12,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   inputGroup: {
     marginBottom: 16,
   },
   label: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
     marginBottom: 8,
   },
   input: {
@@ -565,6 +866,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 8,
   },
   interestsContainer: {
     flexDirection: 'row',
@@ -579,14 +884,32 @@ const styles = StyleSheet.create({
   },
   interestText: {
     fontSize: 14,
-    marginBottom: 16,
-    color: '#666',
+    fontWeight: '500',
+  },
+  settingItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  settingContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  settingText: {
+    fontSize: 16,
+    fontWeight: '500',
   },
   saveButton: {
     margin: 16,
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
   },
   saveButtonText: {
     color: '#fff',
@@ -599,25 +922,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
   },
   signOutText: {
     fontSize: 16,
     fontWeight: '600',
-  },
-  settingItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  settingContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  settingText: {
-    fontSize: 16,
-    marginLeft: 12,
   },
   loadingContainer: {
     flex: 1,

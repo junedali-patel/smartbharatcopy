@@ -14,6 +14,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 WebBrowser.maybeCompleteAuthSession();
 
 export default function SignupScreen() {
+  const { language, toggleLanguage, t } = useLanguage();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -211,7 +212,7 @@ export default function SignupScreen() {
           <Text style={[styles.footerText, { color: secondaryTextColor }]}>
             Already have an account?
           </Text>
-          <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
+          <TouchableOpacity onPress={() => router.push('/auth/login')}>
             <Text style={[styles.footerLink, { color: accentColor }]}> Sign In</Text>
           </TouchableOpacity>
         </View>

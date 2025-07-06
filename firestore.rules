@@ -1,18 +1,28 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow read/write access on all documents to any user signed in to the application
+    // Users collection - users can only access their own profile
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Tasks collection - users can only access their own tasks
+    match /tasks/{taskId} {
+      allow read, write: if request.auth != null && 
+        (resource == null || resource.data.userId == request.auth.uid) &&
+        (request.resource == null || request.resource.data.userId == request.auth.uid);
+    }
+    
+    // Schemes collection - anyone can read, but only admins can write
+    match /schemes/{schemeId} {
+      allow read: if true;
+      allow write: if request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+    
+    // Default rule - deny all other access
     match /{document=**} {
-      allow read, write: if request.auth != null;
-      
-      // For development, you can use these rules to allow all access
-      // allow read, write: if true;
-      
-      // For production, you should implement more specific rules like:
-      // allow read: if request.auth != null;
-      // allow write: if request.auth != null && 
-      //   (request.resource.data.userId == request.auth.uid || 
-      //    get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true);
+      allow read, write: if false;
     }
   }
 }
