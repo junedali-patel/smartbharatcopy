@@ -26,6 +26,7 @@ export default function TabLayout() {
         tabBarItemStyle: {
           paddingVertical: 4,
         },
+        tabBarShowLabel: true,
       }}>
       <Tabs.Screen
         name="index"
