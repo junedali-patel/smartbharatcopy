@@ -1,4 +1,5 @@
 import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
+import FarmerServicesModal from '../../components/FarmerServicesModal';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { BlurView } from 'expo-blur';
 import { router } from 'expo-router';
@@ -247,6 +248,7 @@ export default function HomeScreen() {
   const [isCropModalVisible, setCropModalVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentTranscript, setCurrentTranscript] = useState('');
+  const [isServicesModalVisible, setServicesModalVisible] = useState(false);
   const voiceService = useRef<VoiceService | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isVoiceAvailable, setIsVoiceAvailable] = useState(true);
@@ -309,7 +311,7 @@ export default function HomeScreen() {
 
   const quickActions = [
     { id: '1', title: 'Apply for Scheme', icon: 'gift' as const, color: '#FF9500', route: '/schemes' as TabRoute },
-    { id: '2', title: 'Check Status', icon: 'search' as const, color: '#34C759', route: '/schemes' as TabRoute },
+    //{ id: '2', title: 'Check Status', icon: 'search' as const, color: '#34C759', route: '/schemes' as TabRoute },
     { id: '4', title: 'Voice Assistant', icon: 'microphone' as const, color: '#FF3B30', route: '/tasks' as TabRoute },
   ];
 
@@ -1020,6 +1022,15 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
               </View>
               <Text style={[styles.quickActionText, { color: textColor }]}>Crop-Checkup</Text>
             </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.quickActionCard, { backgroundColor: cardBackground, borderColor }]} 
+              onPress={() => setServicesModalVisible(true)}
+            >
+              <View style={[styles.actionIconContainer, { backgroundColor: '#4CAF50' + '20' }]}>
+                <MaterialIcons name="agriculture" size={24} color="#4CAF50" />
+              </View>
+              <Text style={[styles.quickActionText, { color: textColor }]}>Farm Services</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -1059,6 +1070,12 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
 
 
       </ScrollView>
+
+      {/* Farmer Services Modal */}
+      <FarmerServicesModal 
+        visible={isServicesModalVisible} 
+        onClose={() => setServicesModalVisible(false)} 
+      />
 
       {/* Weather Details Modal */}
       <Modal
