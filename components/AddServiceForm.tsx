@@ -4,8 +4,8 @@ import { View, TextInput, Button, StyleSheet, ScrollView, Alert, Image, Touchabl
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, auth, storage } from '../firebaseConfig';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db, auth, storage } from '../services/firebaseConfig';
+import { collection, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
 import { MaterialIcons } from '@expo/vector-icons';
 
 const SERVICE_TYPES = [
@@ -21,8 +21,16 @@ const SERVICE_TYPES = [
   'Other Equipment'
 ];
 
-const AddServiceForm = ({ onClose, onSuccess }) => {
-  const [service, setService] = useState({
+interface AddServiceFormProps {
+  onClose: () => void;
+  onSuccess: () => void;
+  initialData?: any;
+  isEdit?: boolean;
+}
+
+const AddServiceForm = ({ onClose, onSuccess, initialData = null, isEdit = false }: AddServiceFormProps) => {
+  type ImageType = string;
+  const [service, setService] = useState<any>(initialData ? { ...initialData, images: initialData.images || [] } : {
     type: SERVICE_TYPES[0],
     title: '',
     description: '',
@@ -30,7 +38,7 @@ const AddServiceForm = ({ onClose, onSuccess }) => {
     location: '',
     contact: '',
     available: true,
-    images: []
+    images: [] as ImageType[],
   });
   const [uploading, setUploading] = useState(false);
 
@@ -40,28 +48,20 @@ const AddServiceForm = ({ onClose, onSuccess }) => {
       Alert.alert('Permission required', 'Please allow access to your photos to upload images.');
       return;
     }
-
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.8,
+      base64: true,
     });
-    if (!result.canceled) {
-      setService(prev => ({
+    if (!result.canceled && result.assets && result.assets.length > 0 && result.assets[0].base64) {
+      const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+      setService((prev: any) => ({
         ...prev,
-        images: [...prev.images, result.uri]
+        images: [...prev.images, base64Image],
       }));
     }
-  };
-
-  const uploadImage = async (uri) => {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    const filename = uri.substring(uri.lastIndexOf('/') + 1);
-    const storageRef = ref(storage, `services/${Date.now()}_${filename}`);
-    await uploadBytes(storageRef, blob);
-    return await getDownloadURL(storageRef);
   };
 
   const handleSubmit = async () => {
@@ -69,46 +69,43 @@ const AddServiceForm = ({ onClose, onSuccess }) => {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
     }
-
-    if (service.images.length === 0) {
+    if (!service.images || service.images.length === 0) {
       Alert.alert('Error', 'Please add at least one image');
       return;
     }
-
     setUploading(true);
     try {
-      // Upload images first
-      const imageUrls = await Promise.all(
-        service.images.map(uri => uploadImage(uri))
-      );
-
-      // Save service data to Firestore
       const serviceData = {
         ...service,
         userId: auth.currentUser?.uid,
-        images: imageUrls,
         dailyRate: parseFloat(service.dailyRate),
-        createdAt: serverTimestamp(),
-        rating: 0,
-        reviews: 0
+        updatedAt: serverTimestamp(),
       };
-
-      await addDoc(collection(db, 'services'), serviceData);
-      Alert.alert('Success', 'Service listed successfully!');
+      if (isEdit && initialData?.id) {
+        await updateDoc(doc(db, 'services', initialData.id), serviceData);
+        Alert.alert('Success', 'Listing updated successfully!');
+      } else {
+        await addDoc(collection(db, 'services'), {
+          ...serviceData,
+          createdAt: serverTimestamp(),
+          rating: 0,
+          reviews: 0
+        });
+        Alert.alert('Success', 'Service listed successfully!');
+      }
       onSuccess();
       onClose();
     } catch (error) {
-      console.error('Error adding service:', error);
-      Alert.alert('Error', 'Failed to list service. Please try again.');
+      Alert.alert('Error', 'Failed to save service. Please try again.');
     } finally {
       setUploading(false);
     }
   };
 
-  const removeImage = (index) => {
+  const removeImage = (index: number) => {
     const newImages = [...service.images];
     newImages.splice(index, 1);
-    setService(prev => ({ ...prev, images: newImages }));
+    setService((prev: any) => ({ ...prev, images: newImages }));
   };
 
   return (

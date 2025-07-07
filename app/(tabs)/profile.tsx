@@ -192,8 +192,6 @@ export default function ProfileScreen() {
 
   const pickImage = async () => {
     try {
-      console.log('ProfileScreen: Requesting image picker permissions...');
-      
       // Request permissions
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
@@ -207,29 +205,17 @@ export default function ProfileScreen() {
         );
         return;
       }
-
-      console.log('ProfileScreen: Launching image picker...');
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
-        base64: Platform.OS === 'web', // Enable base64 for web
+        base64: true, // Always get base64
       });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        console.log('ProfileScreen: Image selected, uploading...');
-        
-        if (Platform.OS === 'web' && result.assets[0].base64) {
-          // For web, use base64 approach
-          await uploadImageFromBase64(result.assets[0].base64);
-        } else {
-          // For mobile, use URI approach
-          await uploadImage(result.assets[0].uri);
-        }
+      if (!result.canceled && result.assets && result.assets.length > 0 && result.assets[0].base64) {
+        await uploadImageFromBase64(result.assets[0].base64);
       }
     } catch (error) {
-      console.error('ProfileScreen: Error picking image:', error);
       Alert.alert('Error', 'Failed to pick image. Please try again.');
     }
   };
@@ -239,131 +225,14 @@ export default function ProfileScreen() {
       Alert.alert('Error', 'User not authenticated');
       return;
     }
-
     try {
       setUploadingImage(true);
-      console.log('ProfileScreen: Starting base64 image upload...');
-
-      // For development, store locally to avoid CORS issues
-      if (__DEV__) {
-        console.log('ProfileScreen: Development mode - storing image locally');
-        const localImageUrl = `data:image/jpeg;base64,${base64Data}`;
-        setProfile(prev => ({ ...prev, avatarUrl: localImageUrl }));
-        await updateProfile({ avatarUrl: localImageUrl });
-        Alert.alert('Success', 'Profile picture updated successfully! (Development Mode)');
-        return;
-      }
-
-      // For production, upload to Firebase Storage
-      console.log('ProfileScreen: Production mode - uploading to Firebase Storage');
-      
-      // Convert base64 to blob
-      const byteCharacters = atob(base64Data);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: 'image/jpeg' });
-
-      // Upload to Firebase Storage
-      const storage = getStorage();
-      const fileName = `avatars/${auth.currentUser.uid}_${Date.now()}.jpg`;
-      const storageRef = ref(storage, fileName);
-      
-      console.log('ProfileScreen: Uploading to Firebase Storage...');
-      const uploadResult = await uploadBytes(storageRef, blob);
-      console.log('ProfileScreen: Upload successful, getting download URL...');
-      
-      const downloadURL = await getDownloadURL(uploadResult.ref);
-      console.log('ProfileScreen: Download URL obtained:', downloadURL);
-
-      // Update profile with new avatar URL
-      await updateProfile({ avatarUrl: downloadURL });
-      setProfile(prev => ({ ...prev, avatarUrl: downloadURL }));
-      
+      const localImageUrl = `data:image/jpeg;base64,${base64Data}`;
+      setProfile(prev => ({ ...prev, avatarUrl: localImageUrl }));
+      await updateProfile({ avatarUrl: localImageUrl });
       Alert.alert('Success', 'Profile picture updated successfully!');
     } catch (error) {
-      console.error('ProfileScreen: Error uploading image:', error);
       Alert.alert('Upload Error', 'Failed to upload image. Please try again.');
-    } finally {
-      setUploadingImage(false);
-    }
-  };
-
-  const uploadImage = async (uri: string) => {
-    if (!auth.currentUser) {
-      Alert.alert('Error', 'User not authenticated');
-      return;
-    }
-
-    try {
-      setUploadingImage(true);
-      console.log('ProfileScreen: Starting image upload...');
-
-      // For development, store locally to avoid CORS issues
-      if (__DEV__) {
-        console.log('ProfileScreen: Development mode - storing image locally');
-        setProfile(prev => ({ ...prev, avatarUrl: uri }));
-        await updateProfile({ avatarUrl: uri });
-        Alert.alert('Success', 'Profile picture updated successfully! (Development Mode)');
-        return;
-      }
-
-      // For production, upload to Firebase Storage
-      console.log('ProfileScreen: Production mode - uploading to Firebase Storage');
-
-      // For web, we need to handle the blob conversion differently
-      let blob: Blob;
-      
-      if (Platform.OS === 'web') {
-        // For web, fetch the image and convert to blob
-        const response = await fetch(uri);
-        if (!response.ok) {
-          throw new Error('Failed to fetch image');
-        }
-        blob = await response.blob();
-      } else {
-        // For mobile, use the original approach
-        const response = await fetch(uri);
-        if (!response.ok) {
-          throw new Error('Failed to fetch image');
-        }
-        blob = await response.blob();
-      }
-
-      // Upload to Firebase Storage
-      const storage = getStorage();
-      const fileName = `avatars/${auth.currentUser.uid}_${Date.now()}.jpg`;
-      const storageRef = ref(storage, fileName);
-      
-      console.log('ProfileScreen: Uploading to Firebase Storage...');
-      const uploadResult = await uploadBytes(storageRef, blob);
-      console.log('ProfileScreen: Upload successful, getting download URL...');
-      
-      const downloadURL = await getDownloadURL(uploadResult.ref);
-      console.log('ProfileScreen: Download URL obtained:', downloadURL);
-
-      // Update profile with new avatar URL
-      await updateProfile({ avatarUrl: downloadURL });
-      setProfile(prev => ({ ...prev, avatarUrl: downloadURL }));
-      
-      Alert.alert('Success', 'Profile picture updated successfully!');
-    } catch (error) {
-      console.error('ProfileScreen: Error uploading image:', error);
-      
-      // More specific error handling
-      if (error instanceof Error) {
-        if (error.message.includes('CORS')) {
-          Alert.alert('Upload Error', 'CORS error detected. This is a development issue. The image upload will work in production builds.');
-        } else if (error.message.includes('permission')) {
-          Alert.alert('Permission Error', 'Storage permission denied. Please check your Firebase configuration.');
-        } else {
-          Alert.alert('Upload Error', `Failed to upload image: ${error.message}`);
-        }
-      } else {
-        Alert.alert('Upload Error', 'Failed to upload image. Please try again.');
-      }
     } finally {
       setUploadingImage(false);
     }
