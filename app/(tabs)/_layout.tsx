@@ -11,13 +11,14 @@ export default function TabLayout() {
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         tabBarInactiveTintColor: '#9ca3af',
+        headerShown: false,
+        header: () => null,
         tabBarStyle: {
-          backgroundColor: 'transparent',
-          borderTopColor: 'transparent',
-          elevation: 0,
-          shadowOpacity: 0,
+          backgroundColor: '#ffffff',
+          borderTopWidth: 0,
+          elevation: 8,
+          shadowOpacity: 0.1,
           height: 60,
-          paddingBottom: 8,
         },
         tabBarLabelStyle: {
           fontSize: 12,
@@ -26,47 +27,52 @@ export default function TabLayout() {
         tabBarItemStyle: {
           paddingVertical: 4,
         },
-        tabBarShowLabel: true,
       }}>
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: '',
+          headerShown: false,
           tabBarIcon: ({ color }: { color: string }) => <FontAwesome name="home" size={20} color="#333333" />,
         }}
       />
       <Tabs.Screen
         name="schemes"
         options={{
-          title: 'Schemes',
+          title: '',
+          headerShown: false,
           tabBarIcon: ({ color }: { color: string }) => <FontAwesome name="list" size={20} color="#333333" />,
         }}
       />
       <Tabs.Screen
         name="explore"
         options={{
-          title: 'Explore',
+          title: '',
+          headerShown: false,
           tabBarIcon: ({ color }: { color: string }) => <FontAwesome name="compass" size={20} color="#333333" />,
         }}
       />
       <Tabs.Screen
         name="tasks"
         options={{
-          title: 'Tasks',
+          title: '',
+          headerShown: false,
           tabBarIcon: ({ color }: { color: string }) => <FontAwesome name="tasks" size={20} color="#333333" />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profile',
+          title: '',
+          headerShown: false,
           tabBarIcon: ({ color }: { color: string }) => <FontAwesome name="user" size={20} color="#333333" />,
         }}
       />
       <Tabs.Screen
         name="rent"
         options={{
-          title: 'Rent',
+          title: '',
+          headerShown: false,
           tabBarIcon: ({ color }: { color: string }) => <FontAwesome name="shopping-bag" size={20} color="#333333" />,
         }}
       />

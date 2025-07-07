@@ -52,17 +52,13 @@ export default function RootLayout() {
     <AuthProvider>
       <LanguageProvider>
         <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              header: () => null, // Remove header completely
-              headerStyle: { backgroundColor: 'transparent' }, // Remove black color/shadow
-              headerTitle: '', // Remove title
-            }}
-          >
+          <Stack screenOptions={{
+            headerShown: false,
+            header: () => null,
+          }}>
             <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="auth/login" />
-            <Stack.Screen name="auth/signup" />
+            <Stack.Screen name="auth" />
+            <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
           </Stack>
         </ThemeProvider>
       </LanguageProvider>

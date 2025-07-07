@@ -79,10 +79,7 @@ export default function LoginScreen() {
   return (
     <View style={[styles.container, { backgroundColor }]}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: textColor }]}>Welcome Back</Text>
-        <Text style={[styles.subtitle, { color: secondaryTextColor }]}>
-          Sign in to continue
-        </Text>
+        {/* Title and subtitle removed */}
       </View>
 
       <View style={styles.form}>
@@ -159,8 +156,9 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   header: {
-    marginTop: 60,
-    marginBottom: 40,
+    marginTop: 20,
+    marginBottom: 0,
+    height: 0,
   },
   title: {
     fontSize: 28,
