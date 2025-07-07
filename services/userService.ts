@@ -9,6 +9,7 @@ export interface UserProfile {
   fcmTokens: string[];
   createdAt: string;
   updatedAt: string;
+  role?: 'farmer' | 'provider';
 }
 
 class UserService {

@@ -1024,7 +1024,7 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.quickActionCard, { backgroundColor: cardBackground, borderColor }]} 
-              onPress={() => setServicesModalVisible(true)}
+              onPress={() => router.push('/rent')}
             >
               <View style={[styles.actionIconContainer, { backgroundColor: '#4CAF50' + '20' }]}>
                 <MaterialIcons name="agriculture" size={24} color="#4CAF50" />

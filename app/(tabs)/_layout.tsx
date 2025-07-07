@@ -63,6 +63,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }: { color: string }) => <FontAwesome name="user" size={20} color="#333333" />,
         }}
       />
+      <Tabs.Screen
+        name="rent"
+        options={{
+          title: 'Rent',
+          tabBarIcon: ({ color }: { color: string }) => <FontAwesome name="shopping-bag" size={20} color="#333333" />,
+        }}
+      />
     </Tabs>
   );
 }
