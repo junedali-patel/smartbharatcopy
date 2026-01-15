@@ -20,9 +20,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeColor } from '../../hooks/useThemeColor';
 import { auth, db } from '../../services/firebase';
 import { doc, setDoc, updateDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-
 import { FieldValue } from 'firebase/firestore';
+import FirestoreImageService from '../../services/firestoreImageService';
 
 type UserProfile = {
   name: string;
@@ -81,6 +80,7 @@ export default function ProfileScreen() {
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const [avatarDataUri, setAvatarDataUri] = useState<string | null>(null);
 
   useEffect(() => {
     console.log('ProfileScreen: Component mounted');
@@ -144,6 +144,16 @@ export default function ProfileScreen() {
           ...data,
           interests: Array.isArray(data.interests) ? data.interests : []
         });
+        
+        // If avatarUrl is an image ID (not a URL), fetch the image from Firestore
+        if (data.avatarUrl && !data.avatarUrl.includes('://')) {
+          console.log('ProfileScreen: Fetching avatar image from Firestore');
+          const imageService = FirestoreImageService.getInstance();
+          const imageUri = await imageService.getImage(data.avatarUrl);
+          if (imageUri) {
+            setAvatarDataUri(imageUri);
+          }
+        }
       } else {
         console.log('ProfileScreen: No user profile found, creating default profile');
         // Create a default profile if none exists
@@ -206,11 +216,11 @@ export default function ProfileScreen() {
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.8,
-        base64: true, // Always get base64
+        quality: 0.6,  // Aggressive compression (40% quality)
+        base64: true,
       });
       if (!result.canceled && result.assets && result.assets.length > 0 && result.assets[0].base64) {
         await uploadImageFromBase64(result.assets[0].base64);
@@ -227,11 +237,14 @@ export default function ProfileScreen() {
     }
     try {
       setUploadingImage(true);
-      const localImageUrl = `data:image/jpeg;base64,${base64Data}`;
-      setProfile(prev => ({ ...prev, avatarUrl: localImageUrl }));
-      await updateProfile({ avatarUrl: localImageUrl });
+      const imageService = FirestoreImageService.getInstance();
+      const imageId = await imageService.uploadImage(base64Data, 'image/jpeg', 'profile');
+      
+      // Store the image ID in the profile
+      await updateProfile({ avatarUrl: imageId });
       Alert.alert('Success', 'Profile picture updated successfully!');
     } catch (error) {
+      console.error('Image upload error:', error);
       Alert.alert('Upload Error', 'Failed to upload image. Please try again.');
     } finally {
       setUploadingImage(false);
@@ -375,8 +388,8 @@ export default function ProfileScreen() {
             onPress={editing ? pickImage : undefined}
             disabled={!editing || uploadingImage}
           >
-            {profile.avatarUrl && !profile.avatarUrl.includes('firebasestorage.googleapis.com') ? (
-              <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} />
+            {avatarDataUri ? (
+              <Image source={{ uri: avatarDataUri }} style={styles.avatar} />
             ) : (
               <View style={styles.avatarPlaceholder}>
                 <FontAwesome name="user-circle" size={60} color={accentColor} />

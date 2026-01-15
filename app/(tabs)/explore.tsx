@@ -93,21 +93,22 @@ export default function MarketPriceScreen() {
         <Text style={styles.headerTitle}>Market Prices</Text>
       </View>
 
+      {/* Search bar card */}
       <View style={styles.searchContainer}>
-        <View style={styles.inputWrapper}>
-          <FontAwesome name="search" size={16} color="#999" style={styles.searchIcon} />
+        <View style={styles.searchCard}>
+          <FontAwesome name="search" size={16} color="#A0A0A0" style={styles.searchIcon} />
           <TextInput
             style={styles.input}
-            placeholder="Search by Location, Pincode, or Crop..."
-            placeholderTextColor="#999"
+            placeholder="Search by Crop, Location, Pincode"
+            placeholderTextColor="#A0A0A0"
             value={searchQuery}
             onChangeText={setSearchQuery}
             onSubmitEditing={handleSearch}
           />
+          <TouchableOpacity onPress={handleSearch}>
+            <FontAwesome name="microphone" size={18} color="#A0A0A0" />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.searchButton} onPress={handleSearch}>
-          <Text style={styles.searchButtonText}>Search</Text>
-        </TouchableOpacity>
       </View>
 
       <View style={styles.filterContainer}>
@@ -134,22 +135,20 @@ export default function MarketPriceScreen() {
             categorizedData.map(item => (
               <TouchableOpacity key={item.id} onPress={() => handleCardPress(item)}>
                 <View style={styles.card}>
-                  <View style={styles.cardHeader}>
-                    <Text style={styles.cropName}>{item.cropName} ({item.variety})</Text>
-                    <Text style={styles.marketName}>{item.marketName}</Text>
-                  </View>
-                  <View style={styles.priceContainer}>
-                    <View style={styles.priceBox}>
-                      <Text style={styles.priceLabel}>Min Price</Text>
-                      <Text style={styles.priceText}>₹{item.minPrice}</Text>
+                  <View style={styles.cardRow}>
+                    <View style={styles.cardLeft}>
+                      <Text style={styles.cropName}>
+                        {item.cropName} ({item.variety})
+                      </Text>
+                      <Text style={styles.marketName}>{item.marketName}, {item.location}</Text>
                     </View>
-                    <View style={styles.priceBox}>
-                      <Text style={styles.priceLabel}>Max Price</Text>
-                      <Text style={styles.priceText}>₹{item.maxPrice}</Text>
-                    </View>
-                    <View style={styles.priceBox}>
-                      <Text style={styles.priceLabel}>Modal Price</Text>
-                      <Text style={styles.priceText}>₹{item.modalPrice} / {item.priceUnit}</Text>
+                    <View style={styles.cardRight}>
+                      <Text style={styles.priceRange}>
+                        ₹{item.minPrice}-{item.maxPrice}/{item.priceUnit}
+                      </Text>
+                      <Text style={styles.modalPrice}>
+                        ₹{item.modalPrice}/{item.priceUnit}
+                      </Text>
                     </View>
                   </View>
                 </View>
@@ -217,13 +216,13 @@ export default function MarketPriceScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#F4F8F3',
   },
   header: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
+    backgroundColor: 'transparent',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
   headerTitle: {
     fontSize: 22,
@@ -231,19 +230,21 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   searchContainer: {
-    flexDirection: 'row',
-    padding: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
+    paddingHorizontal: 16,
+    paddingBottom: 8,
   },
-  inputWrapper: {
-    flex: 1,
+  searchCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f1f1f1',
-    borderRadius: 20,
-    paddingHorizontal: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
   searchIcon: {
     marginRight: 8,
@@ -253,24 +254,10 @@ const styles = StyleSheet.create({
     height: 40,
     fontSize: 14,
   },
-  searchButton: {
-    marginLeft: 10,
-    backgroundColor: '#2E7D32',
-    borderRadius: 20,
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-  },
-  searchButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
   filterContainer: {
     paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
+    paddingHorizontal: 16,
+    backgroundColor: 'transparent',
   },
   filterButton: {
     paddingVertical: 8,
@@ -293,12 +280,14 @@ const styles = StyleSheet.create({
     marginTop: 30,
   },
   listContainer: {
-    padding: 12,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
   card: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -306,11 +295,17 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  cardHeader: {
-    marginBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f1f1',
-    paddingBottom: 12,
+  cardRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  cardLeft: {
+    flexShrink: 1,
+    paddingRight: 12,
+  },
+  cardRight: {
+    alignItems: 'flex-end',
   },
   cropName: {
     fontSize: 18,
@@ -326,16 +321,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  priceBox: {
-    alignItems: 'center',
-  },
-  priceLabel: {
+  priceRange: {
     fontSize: 12,
-    color: '#888',
-    marginBottom: 4,
+    color: '#777',
   },
-  priceText: {
-    fontSize: 16,
+  modalPrice: {
+    marginTop: 4,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#2E7D32',
   },

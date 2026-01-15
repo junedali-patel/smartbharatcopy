@@ -2,11 +2,12 @@ import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import FarmerServicesModal from '../../components/FarmerServicesModal';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { Audio } from 'expo-av';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Image, Linking, Platform, Modal, TextInput, KeyboardAvoidingView, ActivityIndicator, Animated } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Image, ImageBackground, Linking, Platform, Modal, TextInput, KeyboardAvoidingView, ActivityIndicator, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeColor } from '../../hooks/useThemeColor';
 import { db, auth } from '../../services/firebase';
@@ -244,7 +245,6 @@ export default function HomeScreen() {
   const [transcript, setTranscript] = useState('');
   const [assistantResponse, setAssistantResponse] = useState('');
   const [buttonPressed, setButtonPressed] = useState(null);
-  const [isWeatherModalVisible, setWeatherModalVisible] = useState(false);
   const [isCropModalVisible, setCropModalVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentTranscript, setCurrentTranscript] = useState('');
@@ -266,21 +266,11 @@ export default function HomeScreen() {
   const taskService = FirebaseTaskService.getInstance(); // Initialize task service
   const [showWeatherModal, setShowWeatherModal] = useState(false);
 
-  // Generate location-specific weather data
+  // Note: Real weather data is now fetched from WeatherService API
+  // This mock function is kept for reference but not used
   const getLocationWeatherData = (city: string, state: string) => {
-    // Simple weather data based on location
-    const weatherData = {
-      'Mumbai': { temp: 32, feelsLike: 35, condition: 'Partly cloudy', wind: '15 km/h', humidity: 75, uv: 8 },
-      'Kolhapur': { temp: 28, feelsLike: 30, condition: 'Sunny', wind: '8 km/h', humidity: 60, uv: 6 },
-      'Pune': { temp: 26, feelsLike: 28, condition: 'Clear skies', wind: '12 km/h', humidity: 55, uv: 5 },
-      'Delhi': { temp: 35, feelsLike: 38, condition: 'Hazy', wind: '20 km/h', humidity: 45, uv: 9 },
-      'Bangalore': { temp: 24, feelsLike: 26, condition: 'Cloudy', wind: '10 km/h', humidity: 70, uv: 4 },
-      'Chennai': { temp: 30, feelsLike: 33, condition: 'Humid', wind: '18 km/h', humidity: 80, uv: 7 },
-      'Hyderabad': { temp: 29, feelsLike: 31, condition: 'Partly sunny', wind: '14 km/h', humidity: 65, uv: 6 },
-      'Kolkata': { temp: 31, feelsLike: 34, condition: 'Overcast', wind: '16 km/h', humidity: 78, uv: 7 }
-    };
-    
-    return weatherData[city as keyof typeof weatherData] || weatherData['Pune'];
+    // Real weather is fetched from OpenWeatherMap API via WeatherService
+    return null;
   };
 
   const languages = [
@@ -874,123 +864,145 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
     return () => clearTimeout(timer);
   }, []);
 
+  // Map current weather condition to Rain-main's weather images
+  // Uses day/night detection similar to Rain-main's StatusWeather.getImageNow()
+  const getRainWeatherIcon = () => {
+    const condition = weatherData?.current.condition.text.toLowerCase() || '';
+    const now = new Date();
+    const hour = now.getHours();
+    const isDayTime = hour >= 6 && hour < 18; // Day: 6 AM to 6 PM
+
+    // Thunder/Storm
+    if (condition.includes('thunder') || condition.includes('storm')) {
+      return require('../../Rain-main/assets/images/thunder.png');
+    }
+    // Snow
+    if (condition.includes('snow') || condition.includes('sleet')) {
+      return isDayTime 
+        ? require('../../Rain-main/assets/images/snow_day.png')
+        : require('../../Rain-main/assets/images/snow_night.png');
+    }
+    // Rain
+    if (condition.includes('rain') || condition.includes('drizzle') || condition.includes('shower')) {
+      return isDayTime
+        ? require('../../Rain-main/assets/images/rain_day.png')
+        : require('../../Rain-main/assets/images/rain_night.png');
+    }
+    // Fog/Mist
+    if (condition.includes('fog') || condition.includes('mist') || condition.includes('haze')) {
+      return isDayTime
+        ? require('../../Rain-main/assets/images/fog_day.png')
+        : require('../../Rain-main/assets/images/fog_night.png');
+    }
+    // Cloudy
+    if (condition.includes('cloud')) {
+      return isDayTime
+        ? require('../../Rain-main/assets/images/cloudy_day.png')
+        : require('../../Rain-main/assets/images/cloudy_night.png');
+    }
+    // Clear
+    if (condition.includes('clear') || condition.includes('sunny')) {
+      return isDayTime
+        ? require('../../Rain-main/assets/images/clear_day.png')
+        : require('../../Rain-main/assets/images/clear_night.png');
+    }
+
+    // Default
+    return require('../../Rain-main/assets/images/atmospheric.png');
+  };
+
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor }]}>
       <ScrollView style={styles.scrollView}>
-        {/* Welcome Section */}
-        <View style={styles.welcomeSection}>
-          <View style={styles.welcomeHeader}>
-            <FontAwesome name="leaf" size={24} color="#2E7D32" />
-            <View style={styles.welcomeTextContainer}>
-              <Text style={[styles.welcomeText, { color: textColor }]}>
-                Welcome to Smart Bharat
-              </Text>
-              <Text style={[styles.subtitle, { color: secondaryTextColor }]}>
-                Your Digital Companion for Rural India
-              </Text>
-            </View>
-          </View>
-          <View style={styles.welcomeStats}>
-            <View style={styles.statItem}>
-              <FontAwesome name="users" size={16} color="#2E7D32" />
-              <Text style={styles.statText}>1M+ Farmers</Text>
-            </View>
-            <View style={styles.statItem}>
-              <FontAwesome name="map-marker" size={16} color="#2E7D32" />
-              <Text style={styles.statText}>28 States</Text>
-            </View>
-            <View style={styles.statItem}>
-              <FontAwesome name="check-circle" size={16} color="#2E7D32" />
-              <Text style={styles.statText}>500+ Schemes</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Weather Section */}
-        <TouchableOpacity onPress={() => setShowWeatherModal(true)}>
-          <View style={[styles.weatherCard, { backgroundColor: cardBackground, borderColor }]}>
-            <View style={styles.weatherHeader}>
-              <FontAwesome name="cloud" size={24} color="#1976D2" />
-              <View style={styles.weatherInfo}>
-                <Text style={[styles.weatherTitle, { color: textColor }]}>
-                  Weather in {userLocation.city}
+        {/* Top gradient hero: welcome + weather */}
+        <LinearGradient
+          colors={['#FFFBEA', '#E4F7EB']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.topGradient}
+        >
+          {/* Welcome Section */}
+          <View style={styles.welcomeSection}>
+            <View style={styles.welcomeHeader}>
+              <FontAwesome name="leaf" size={24} color="#2E7D32" />
+              <View style={styles.welcomeTextContainer}>
+                <Text style={[styles.welcomeText, { color: textColor }]}>
+                  Welcome to Smart Bharat
                 </Text>
-                <Text style={[styles.weatherSubtitle, { color: secondaryTextColor }]}>
-                  {userLocation.state}
+                <Text style={[styles.subtitle, { color: secondaryTextColor }]}>
+                  Your Digital Companion for Rural India
                 </Text>
               </View>
-              <TouchableOpacity
-                onPress={async (e) => {
-                  e.stopPropagation();
-                  console.log('Testing weather API...');
-                  const weatherService = WeatherService.getInstance();
-                  
-                  // First test if API is working
-                  const apiWorking = await weatherService.testAPI();
-                  console.log('API working:', apiWorking);
-                  
-                  if (apiWorking) {
-                    const testWeather = await weatherService.getWeatherByCity('Mumbai');
-                    console.log('Test weather result:', testWeather);
-                    setWeatherData(testWeather);
-                  } else {
-                    console.log('Weather API is not working');
-                  }
-                }}
-                style={{ padding: 5 }}
-              >
-                <FontAwesome name="refresh" size={16} color="#1976D2" />
-              </TouchableOpacity>
             </View>
-            <View style={styles.weatherDetails}>
-              {weatherLoading ? (
-                <ActivityIndicator size="small" color="#1976D2" />
-              ) : weatherData ? (
-                <>
-                  <View style={styles.weatherDetailItem}>
-                    <FontAwesome name="thermometer-half" size={16} color="#FF6B35" />
-                    <Text style={[styles.weatherText, { color: textColor }]}>
-                      {Math.round(weatherData.current.temp_c)}°C
-                    </Text>
-                  </View>
-                  <View style={styles.weatherDetailItem}>
-                    <FontAwesome name="tint" size={16} color="#4FC3F7" />
-                    <Text style={[styles.weatherText, { color: textColor }]}>
-                      {weatherData.current.humidity}%
-                    </Text>
-                  </View>
-                  <View style={styles.weatherDetailItem}>
-                    <FontAwesome name="cloud" size={16} color="#8BC34A" />
-                    <Text style={[styles.weatherText, { color: textColor }]}>
-                      {Math.round(weatherData.current.wind_kph)} km/h
-                    </Text>
-                  </View>
-                </>
-              ) : (
-                <>
-                  <View style={styles.weatherDetailItem}>
-                    <FontAwesome name="thermometer-half" size={16} color="#FF6B35" />
-                    <Text style={[styles.weatherText, { color: textColor }]}>
-                      --°C
-                    </Text>
-                  </View>
-                  <View style={styles.weatherDetailItem}>
-                    <FontAwesome name="tint" size={16} color="#4FC3F7" />
-                    <Text style={[styles.weatherText, { color: textColor }]}>
-                      --%
-                    </Text>
-                  </View>
-                  <View style={styles.weatherDetailItem}>
-                    <FontAwesome name="cloud" size={16} color="#8BC34A" />
-                    <Text style={[styles.weatherText, { color: textColor }]}>
-                      -- km/h
-                    </Text>
-                  </View>
-                </>
-              )}
+            <View style={styles.welcomeStats}>
+              <View style={styles.statItem}>
+                <FontAwesome name="users" size={16} color="#2E7D32" />
+                <Text style={styles.statText}>1.2M+ Farmers</Text>
+              </View>
+              <View style={styles.statItem}>
+                <FontAwesome name="map-marker" size={16} color="#2E7D32" />
+                <Text style={styles.statText}>28 States</Text>
+              </View>
+              <View style={styles.statItem}>
+                <FontAwesome name="check-circle" size={16} color="#2E7D32" />
+                <Text style={styles.statText}>350+ Schemes</Text>
+              </View>
             </View>
           </View>
-        </TouchableOpacity>
+
+          {/* Weather Section - Rain-main style Card design */}
+          <TouchableOpacity onPress={() => setShowWeatherModal(true)} activeOpacity={0.9}>
+            <View style={styles.weatherCardRain}>
+              <View style={styles.weatherCardContent}>
+                <View style={styles.weatherCardLeft}>
+                  <Text style={styles.weatherDateRain}>
+                    {weatherData?.location?.localtime
+                      ? new Date(weatherData.location.localtime).toLocaleDateString('en-US', {
+                          weekday: 'long',
+                          month: 'long',
+                          day: 'numeric'
+                        })
+                      : new Date().toLocaleDateString('en-US', {
+                          weekday: 'long',
+                          month: 'long',
+                          day: 'numeric'
+                        })}
+                  </Text>
+                  <Text style={styles.weatherConditionRain}>
+                    {weatherData?.current?.condition?.text || 'Weather for your farm'}
+                  </Text>
+                  {weatherData && (
+                    <View style={styles.weatherFeelsLikeRow}>
+                      <Text style={styles.weatherFeelsLikeLabel}>Feels like</Text>
+                      <Text style={styles.weatherFeelsLikeValue}>
+                        {' • '}
+                        {Math.round(weatherData.current.feelslike_c)}°C
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.weatherTempSpacer} />
+                  <Text style={styles.weatherTempRain}>
+                    {weatherLoading || !weatherData
+                      ? '--'
+                      : Math.round(weatherData.current.temp_c)}
+                    °C
+                  </Text>
+                  {weatherData && (
+                    <View style={styles.weatherMinMaxRow}>
+                      <Text style={styles.weatherMinMaxText}>
+                        {Math.round(weatherData.current.temp_c + 3)}°C / {Math.round(weatherData.current.temp_c - 3)}°C
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <View style={styles.weatherCardRight}>
+                  <Image source={getRainWeatherIcon()} style={styles.weatherImageRain} />
+                </View>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </LinearGradient>
 
         {/* Quick Actions */}
         <View style={styles.quickActionsContainer}>
@@ -1078,39 +1090,6 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
       />
 
       {/* Weather Details Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={isWeatherModalVisible}
-        onRequestClose={() => setWeatherModalVisible(false)}
-      >
-        <View style={styles.weatherModalContainer}>
-          <View style={styles.weatherModalView}>
-            <Text style={styles.weatherModalTitle}>Detailed Weather Report</Text>
-            {(() => {
-              const weather = getLocationWeatherData(userLocation.city, userLocation.state);
-              return (
-                <>
-                  <Text style={styles.weatherModalText}>Location: {userLocation.city}, {userLocation.state}</Text>
-                  <Text style={styles.weatherModalText}>Temperature: {weather.temp}°C (Feels like {weather.feelsLike}°C)</Text>
-                  <Text style={styles.weatherModalText}>Forecast: {weather.condition}</Text>
-                  <Text style={styles.weatherModalText}>Wind: {weather.wind} from SW</Text>
-                  <Text style={styles.weatherModalText}>Humidity: {weather.humidity}%</Text>
-                  <Text style={styles.weatherModalText}>UV Index: {weather.uv} ({weather.uv > 7 ? 'High' : weather.uv > 3 ? 'Moderate' : 'Low'})</Text>
-                  <Text style={styles.weatherModalText}>Analysis: {weather.temp > 30 ? 'Hot day, stay hydrated' : weather.temp < 20 ? 'Cool weather, good for outdoor activities' : 'Pleasant weather conditions'}.</Text>
-                </>
-              );
-            })()}
-            <TouchableOpacity
-              style={styles.weatherModalCloseButton}
-              onPress={() => setWeatherModalVisible(false)}
-            >
-              <Text style={styles.weatherModalCloseButtonText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
       {/* Chat Button */}
       <TouchableOpacity
         style={styles.chatButton}
@@ -1218,158 +1197,173 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
       <Modal
         visible={showWeatherModal}
         transparent={true}
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setShowWeatherModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: backgroundColor }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: textColor }]}>
-                Weather Details
-              </Text>
-              <TouchableOpacity
-                onPress={() => setShowWeatherModal(false)}
-                style={styles.closeButton}
-              >
-                <FontAwesome name="times" size={20} color={textColor} />
-              </TouchableOpacity>
-            </View>
+        <View style={styles.weatherModalOverlay}>
+          <View style={styles.weatherModalContent}>
+            <TouchableOpacity
+              onPress={() => setShowWeatherModal(false)}
+              style={styles.weatherCloseButton}
+            >
+              <FontAwesome name="times" size={24} color="#333333" />
+            </TouchableOpacity>
 
             {weatherLoading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#1976D2" />
-                <Text style={[styles.loadingText, { color: textColor }]}>
-                  Loading weather data...
-                </Text>
+              <View style={styles.weatherLoadingContainer}>
+                <ActivityIndicator size="large" color="#7C3AED" />
+                <Text style={styles.weatherLoadingText}>Loading weather data...</Text>
               </View>
             ) : weatherData ? (
-              <ScrollView style={styles.modalScrollView}>
-                <View style={styles.weatherModalSection}>
-                  <Text style={[styles.sectionTitle, { color: textColor }]}>
-                    Current Weather in {weatherData.location.name}
+              <ScrollView style={styles.weatherScrollView} showsVerticalScrollIndicator={false}>
+                {/* Header: Location & Current Temp */}
+                <View style={styles.weatherHeaderCard}>
+                  <Text style={styles.weatherLocation}>{weatherData.location.name}</Text>
+                  <Text style={styles.weatherDate}>
+                    {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
                   </Text>
-                  
-                  <View style={styles.weatherMainInfo}>
-                    <View style={styles.temperatureContainer}>
-                      <Text style={[styles.temperatureText, { color: textColor }]}>
+                  <View style={styles.weatherMainContainer}>
+                    <View style={styles.weatherTempSection}>
+                      <Text style={styles.weatherTemperature}>
                         {Math.round(weatherData.current.temp_c)}°C
                       </Text>
-                      <Text style={[styles.feelsLikeText, { color: textColor }]}>
-                        Feels like {Math.round(weatherData.current.feelslike_c)}°C
+                      <Text style={styles.weatherFeelsLike}>
+                        Feels • {Math.round(weatherData.current.feelslike_c)}°C
                       </Text>
                     </View>
-                    <View style={styles.conditionContainer}>
-                      <Text style={[styles.conditionText, { color: textColor }]}>
-                        {weatherData.current.condition.text}
-                      </Text>
+                    <View style={styles.weatherIconSection}>
+                      <Text style={styles.weatherConditionEmoji}>☁️</Text>
                     </View>
+                  </View>
+                  <Text style={styles.weatherCondition}>{weatherData.current.condition.text}</Text>
+                  <View style={styles.weatherTempRange}>
+                    <View style={styles.tempRangeItem}>
+                      <Text style={styles.tempRangeLabel}>Min</Text>
+                      <Text style={styles.tempRangeValue}>4°C</Text>
+                    </View>
+                    <View style={styles.tempRangeItem}>
+                      <Text style={styles.tempRangeLabel}>Max</Text>
+                      <Text style={styles.tempRangeValue}>12°C</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Hourly Forecast */}
+                <View style={styles.weatherHourlySection}>
+                  <Text style={styles.weatherSectionTitle}>Hourly Forecast</Text>
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.weatherHourlyScroll}
+                  >
+                    {[
+                      { time: '20:00', temp: 8, day: 'Tue' },
+                      { time: '21:00', temp: 7, day: 'Tue' },
+                      { time: '22:00', temp: 7, day: 'Tue' },
+                      { time: '23:00', temp: 6, day: 'Tue' },
+                    ].map((item, idx) => (
+                      <View key={idx} style={[styles.weatherHourlyCard, idx === 0 && styles.weatherHourlyCardActive]}>
+                        <Text style={styles.weatherHourlyTime}>{item.time}</Text>
+                        <Text style={styles.weatherHourlyDay}>{item.day}</Text>
+                        <Text style={styles.weatherHourlyEmoji}>☁️</Text>
+                        <Text style={styles.weatherHourlyTemp}>{item.temp}°C</Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
+
+                {/* Sun Info */}
+                <View style={styles.weatherSunSection}>
+                  <View style={styles.weatherSunItem}>
+                    <Text style={styles.weatherSunEmoji}>🌅</Text>
+                    <Text style={styles.weatherSunLabel}>Sunrise</Text>
+                    <Text style={styles.weatherSunTime}>06:54</Text>
+                  </View>
+                  <View style={styles.weatherSunDivider} />
+                  <View style={styles.weatherSunItem}>
+                    <Text style={styles.weatherSunEmoji}>🌇</Text>
+                    <Text style={styles.weatherSunLabel}>Sunset</Text>
+                    <Text style={styles.weatherSunTime}>18:24</Text>
+                  </View>
+                </View>
+
+                {/* Weather Variables / Detailed Metrics */}
+                <View style={styles.weatherVariablesSection}>
+                  <View style={styles.weatherVariablesHeader}>
+                    <Text style={styles.weatherVariablesTitle}>Weather Variables</Text>
+                    <FontAwesome name="chevron-down" size={16} color="#A78BFA" />
                   </View>
 
                   <View style={styles.weatherDetailsGrid}>
-                    <View style={styles.detailItem}>
-                      <FontAwesome name="tint" size={20} color="#4FC3F7" />
-                      <Text style={[styles.detailLabel, { color: textColor }]}>Humidity</Text>
-                      <Text style={[styles.detailValue, { color: textColor }]}>
+                    <View style={styles.weatherDetailCard}>
+                      <View style={styles.weatherDetailIconBox}>
+                        <FontAwesome name="tint" size={20} color="#7C3AED" />
+                      </View>
+                      <Text style={styles.weatherDetailLabel}>Humidity</Text>
+                      <Text style={styles.weatherDetailValue}>
                         {weatherData.current.humidity}%
                       </Text>
                     </View>
-                    
-                    <View style={styles.detailItem}>
-                      <FontAwesome name="cloud" size={20} color="#8BC34A" />
-                      <Text style={[styles.detailLabel, { color: textColor }]}>Wind Speed</Text>
-                      <Text style={[styles.detailValue, { color: textColor }]}>
+
+                    <View style={styles.weatherDetailCard}>
+                      <View style={styles.weatherDetailIconBox}>
+                        <MaterialIcons name="air" size={20} color="#7C3AED" />
+                      </View>
+                      <Text style={styles.weatherDetailLabel}>Wind Speed</Text>
+                      <Text style={styles.weatherDetailValue}>
                         {Math.round(weatherData.current.wind_kph)} km/h
                       </Text>
                     </View>
-                    
-                    <View style={styles.detailItem}>
-                      <FontAwesome name="compass" size={20} color="#FF9800" />
-                      <Text style={[styles.detailLabel, { color: textColor }]}>Wind Direction</Text>
-                      <Text style={[styles.detailValue, { color: textColor }]}>
+
+                    <View style={styles.weatherDetailCard}>
+                      <View style={styles.weatherDetailIconBox}>
+                        <FontAwesome name="compass" size={20} color="#7C3AED" />
+                      </View>
+                      <Text style={styles.weatherDetailLabel}>Wind Dir</Text>
+                      <Text style={styles.weatherDetailValue}>
                         {weatherData.current.wind_dir}
                       </Text>
                     </View>
-                    
-                                          <View style={styles.detailItem}>
-                        <FontAwesome name="tachometer" size={20} color="#9C27B0" />
-                        <Text style={[styles.detailLabel, { color: textColor }]}>Pressure</Text>
-                        <Text style={[styles.detailValue, { color: textColor }]}>
-                          {weatherData.current.pressure_mb} mb
-                        </Text>
+
+                    <View style={styles.weatherDetailCard}>
+                      <View style={styles.weatherDetailIconBox}>
+                        <FontAwesome name="eye" size={20} color="#7C3AED" />
                       </View>
-                    
-                    <View style={styles.detailItem}>
-                      <FontAwesome name="eye" size={20} color="#607D8B" />
-                      <Text style={[styles.detailLabel, { color: textColor }]}>Visibility</Text>
-                      <Text style={[styles.detailValue, { color: textColor }]}>
+                      <Text style={styles.weatherDetailLabel}>Visibility</Text>
+                      <Text style={styles.weatherDetailValue}>
                         {weatherData.current.visibility_km} km
                       </Text>
                     </View>
-                    
-                    <View style={styles.detailItem}>
-                      <FontAwesome name="umbrella" size={20} color="#2196F3" />
-                      <Text style={[styles.detailLabel, { color: textColor }]}>Precipitation</Text>
-                      <Text style={[styles.detailValue, { color: textColor }]}>
+
+                    <View style={styles.weatherDetailCard}>
+                      <View style={styles.weatherDetailIconBox}>
+                        <FontAwesome name="tachometer" size={20} color="#7C3AED" />
+                      </View>
+                      <Text style={styles.weatherDetailLabel}>Pressure</Text>
+                      <Text style={styles.weatherDetailValue}>
+                        {weatherData.current.pressure_mb} mb
+                      </Text>
+                    </View>
+
+                    <View style={styles.weatherDetailCard}>
+                      <View style={styles.weatherDetailIconBox}>
+                        <MaterialIcons name="water-drop" size={20} color="#7C3AED" />
+                      </View>
+                      <Text style={styles.weatherDetailLabel}>Precipitation</Text>
+                      <Text style={styles.weatherDetailValue}>
                         {weatherData.current.precip_mm} mm
                       </Text>
                     </View>
                   </View>
-
-                  {/* Agriculture Analysis */}
-                  <View style={styles.agricultureSection}>
-                    <Text style={[styles.sectionTitle, { color: textColor }]}>
-                      Agriculture Analysis
-                    </Text>
-                    {(() => {
-                      const weatherService = WeatherService.getInstance();
-                      const agriInfo = weatherService.getAgricultureWeatherInfo(weatherData);
-                      return (
-                        <View style={styles.agricultureContent}>
-                          <View style={styles.agricultureStatus}>
-                            <FontAwesome 
-                              name={agriInfo.isGoodForFarming ? "check-circle" : "exclamation-triangle"} 
-                              size={24} 
-                              color={agriInfo.isGoodForFarming ? "#4CAF50" : "#FF9800"} 
-                            />
-                            <Text style={[styles.agricultureStatusText, { color: textColor }]}>
-                              {agriInfo.isGoodForFarming ? "Good for farming" : "Farming conditions need attention"}
-                            </Text>
-                          </View>
-                          
-                          {agriInfo.alerts.length > 0 && (
-                            <View style={styles.alertsSection}>
-                              <Text style={[styles.alertsTitle, { color: textColor }]}>Alerts:</Text>
-                              {agriInfo.alerts.map((alert, index) => (
-                                <Text key={index} style={[styles.alertText, { color: '#FF5722' }]}>
-                                  • {alert}
-                                </Text>
-                              ))}
-                            </View>
-                          )}
-                          
-                          {agriInfo.recommendations.length > 0 && (
-                            <View style={styles.recommendationsSection}>
-                              <Text style={[styles.recommendationsTitle, { color: textColor }]}>Recommendations:</Text>
-                              {agriInfo.recommendations.map((rec, index) => (
-                                <Text key={index} style={[styles.recommendationText, { color: '#4CAF50' }]}>
-                                  • {rec}
-                                </Text>
-                              ))}
-                            </View>
-                          )}
-                        </View>
-                      );
-                    })()}
-                  </View>
                 </View>
+
               </ScrollView>
             ) : (
-              <View style={styles.errorContainer}>
-                <FontAwesome name="cloud" size={50} color="#BDBDBD" />
-                <Text style={[styles.errorText, { color: textColor }]}>
+              <View style={styles.weatherErrorContainer}>
+                <Text style={styles.weatherErrorText}>
                   Weather data not available
                 </Text>
-                <Text style={[styles.errorSubtext, { color: textColor }]}>
+                <Text style={styles.weatherErrorSubtext}>
                   Please check your location settings
                 </Text>
               </View>
@@ -1441,7 +1435,15 @@ const ChatMessage = ({ message, index }: { message: ChatMessage; index: number }
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F4F8F3', // soft green-tinted background
+  },
+  topGradient: {
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 24,
+    marginBottom: 16,
   },
   content: {
     flex: 1,
@@ -1579,9 +1581,9 @@ const styles = StyleSheet.create({
   },
   weatherModalView: {
     margin: 20,
-    backgroundColor: 'white',
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    padding: 25,
+    padding: 20,
     alignItems: 'flex-start',
     shadowColor: '#000',
     shadowOffset: {
@@ -1591,10 +1593,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
-    width: '90%',
+    width: '92%',
   },
   weatherModalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 20,
     textAlign: 'center',
@@ -2033,18 +2035,92 @@ const styles = StyleSheet.create({
     fontSize: 16,
     opacity: 0.8,
   },
-  weatherCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+  weatherCardRain: {
+    backgroundColor: '#ffffff',
     borderRadius: 16,
-    padding: 16,
-    marginBottom: 24,
+    marginTop: 12,
+    marginBottom: 15,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 3,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.05)',
+    overflow: 'hidden',
+  },
+  weatherCardContent: {
+    flexDirection: 'row',
+    paddingTop: 14,
+    paddingBottom: 14,
+    paddingLeft: 18,
+    paddingRight: 12,
+    alignItems: 'center',
+  },
+  weatherCardLeft: {
+    flex: 1,
+  },
+  weatherCardRight: {
+    marginLeft: 10,
+  },
+  weatherDateRain: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 5,
+  },
+  weatherConditionRain: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 5,
+  },
+  weatherFeelsLikeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  weatherFeelsLikeLabel: {
+    fontSize: 14,
+    color: '#666',
+  },
+  weatherFeelsLikeValue: {
+    fontSize: 14,
+    color: '#666',
+  },
+  weatherTempSpacer: {
+    height: 10,
+  },
+  weatherTempRain: {
+    fontSize: 42,
+    fontWeight: '800',
+    color: '#333',
+    marginBottom: 5,
+  },
+  weatherMinMaxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  weatherMinMaxText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  weatherImageRain: {
+    width: 120,
+    height: 120,
+    resizeMode: 'contain',
+  },
+  weatherCard: {
+    width: '100%',
+    aspectRatio: 2.6,
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginTop: 16,
+  },
+  weatherCardImage: {
+    resizeMode: 'cover',
+  },
+  weatherOverlay: {
+    flex: 1,
+    padding: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.12)',
   },
   weatherHeader: {
     flexDirection: 'row',
@@ -2059,10 +2135,16 @@ const styles = StyleSheet.create({
   weatherDetails: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginTop: 8,
+    marginTop: 12,
   },
   weatherText: {
     fontSize: 14,
+    color: '#FFFFFF',
+  },
+  weatherRefreshButton: {
+    padding: 6,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.25)',
   },
   chatButton: {
     position: 'absolute',
@@ -2313,9 +2395,14 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   weatherIconContainer: {
-    padding: 16,
-    backgroundColor: '#1976D2',
+    padding: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     borderRadius: 16,
+  },
+  weatherIconImage: {
+    width: 36,
+    height: 36,
+    resizeMode: 'contain',
   },
   weatherInfo: {
     flex: 1,
@@ -2351,26 +2438,34 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'flex-end',
   },
   modalContent: {
-    width: '90%',
-    maxHeight: '80%',
+    width: '100%',
+    maxHeight: '85%',
     backgroundColor: 'white',
-    borderRadius: 10,
-    padding: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
   },
+  modalHandle: {
+    alignSelf: 'center',
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: '#D1D5DB',
+    marginBottom: 12,
+  },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 12,
   },
   modalTitle: {
     fontSize: 18,
@@ -2382,10 +2477,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0f0',
   },
   modalScrollView: {
-    maxHeight: 400,
+    flexGrow: 0,
   },
   weatherModalSection: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
 
   weatherMainInfo: {
@@ -2471,6 +2566,296 @@ const styles = StyleSheet.create({
   recommendationText: {
     fontSize: 12,
     marginBottom: 2,
+  },
+  modalCard: {
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+
+  // New Weather Modal Styles - Matching App Design
+  weatherModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  weatherModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 24,
+    paddingBottom: 32,
+    maxHeight: '90%',
+    borderTopWidth: 4,
+    borderTopColor: '#2E7D32',
+  },
+  weatherCloseButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F5F5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  weatherScrollView: {
+    marginTop: 8,
+    paddingHorizontal: 20,
+  },
+  weatherLoadingContainer: {
+    paddingVertical: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  weatherLoadingText: {
+    color: '#333333',
+    fontSize: 16,
+    marginTop: 12,
+  },
+
+  // Header Card
+  weatherHeaderCard: {
+    backgroundColor: '#F0F9F0',
+    borderRadius: 24,
+    padding: 24,
+    marginBottom: 24,
+    borderLeftWidth: 4,
+    borderLeftColor: '#2E7D32',
+  },
+  weatherLocation: {
+    color: '#333333',
+    fontSize: 24,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  weatherDate: {
+    color: '#666666',
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  weatherMainContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  weatherTempSection: {
+    flex: 1,
+  },
+  weatherTemperature: {
+    fontSize: 56,
+    fontWeight: '700',
+    color: '#2E7D32',
+    lineHeight: 62,
+  },
+  weatherFeelsLike: {
+    color: '#666666',
+    fontSize: 14,
+    marginTop: 4,
+  },
+  weatherIconSection: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  weatherConditionEmoji: {
+    fontSize: 64,
+  },
+  weatherCondition: {
+    color: '#333333',
+    fontSize: 16,
+    marginBottom: 12,
+  },
+  weatherTempRange: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  tempRangeItem: {
+    flex: 1,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#C8E6C9',
+  },
+  tempRangeLabel: {
+    color: '#666666',
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  tempRangeValue: {
+    color: '#2E7D32',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  // Hourly Forecast
+  weatherHourlySection: {
+    marginBottom: 24,
+  },
+  weatherSectionTitle: {
+    color: '#333333',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  weatherHourlyScroll: {
+    gap: 12,
+  },
+  weatherHourlyCard: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    minWidth: 100,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  weatherHourlyCardActive: {
+    backgroundColor: '#E8F5E9',
+    borderColor: '#2E7D32',
+  },
+  weatherHourlyTime: {
+    color: '#333333',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  weatherHourlyDay: {
+    color: '#666666',
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  weatherHourlyEmoji: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  weatherHourlyTemp: {
+    color: '#2E7D32',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Sun Info
+  weatherSunSection: {
+    flexDirection: 'row',
+    backgroundColor: '#F0F9F0',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    borderWidth: 1,
+    borderColor: '#C8E6C9',
+  },
+  weatherSunItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  weatherSunEmoji: {
+    fontSize: 40,
+    marginBottom: 8,
+  },
+  weatherSunLabel: {
+    color: '#666666',
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  weatherSunTime: {
+    color: '#333333',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  weatherSunDivider: {
+    width: 1,
+    height: 60,
+    backgroundColor: '#C8E6C9',
+    marginHorizontal: 8,
+  },
+
+  // Weather Variables / Detailed Metrics
+  weatherVariablesSection: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  weatherVariablesHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  weatherVariablesTitle: {
+    color: '#333333',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  weatherDetailsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  weatherDetailCard: {
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  weatherDetailIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: '#E8F5E9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  weatherDetailLabel: {
+    color: '#666666',
+    fontSize: 11,
+    marginBottom: 4,
+    fontWeight: '500',
+  },
+  weatherDetailValue: {
+    color: '#2E7D32',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  weatherErrorContainer: {
+    paddingVertical: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  weatherErrorText: {
+    color: '#D32F2F',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  weatherErrorSubtext: {
+    color: '#666666',
+    fontSize: 14,
   },
 
   errorSubtext: {

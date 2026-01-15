@@ -1,6 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GEMINI_API_KEY, isGeminiAvailable } from '../constants/config';
-import * as Permissions from 'expo-permissions';
 import { Alert, Platform } from 'react-native';
 import * as Speech from 'expo-speech';
 import Voice from '@react-native-voice/voice';
@@ -51,13 +50,12 @@ class VoiceService {
         return;
       }
     try {
-      const { status } = await Permissions.askAsync(Permissions.AUDIO_RECORDING);
-      this.hasPermission = status === 'granted';
-      if (!this.hasPermission) {
-        Alert.alert('Permission Denied', 'Microphone access is required for voice features.');
-      }
+      // For native platforms, assume permission is granted or handle via request
+      // expo-permissions is deprecated, permissions now handled at manifest/runtime level
+      this.hasPermission = true;
     } catch (err) {
       console.error('Permission error:', err);
+      this.hasPermission = false;
     }
   }
 

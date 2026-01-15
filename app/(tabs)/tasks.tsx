@@ -664,10 +664,12 @@ export default function TasksScreen() {
     }
   };
 
+  const totalTasksCount = tasks.length;
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor }]}>
       <View style={[styles.header, { borderBottomColor: borderColor }]}>
-        <Text style={[styles.headerTitle, { color: textColor }]}>Tasks</Text>
+        <Text style={[styles.headerTitle, { color: textColor }]}>My Farm Tasks</Text>
         <View style={styles.headerButtons}>
           <TouchableOpacity 
             style={[styles.refreshButton, { backgroundColor: accentColor }]}
@@ -777,29 +779,24 @@ export default function TasksScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Tasks List */}
-      <View style={styles.filterContainer}>
-        <Text style={styles.filterTitle}>Category</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScrollView}>
-          {categories.map((category) => (
-            <TouchableOpacity
-              key={category}
-              style={[
-                styles.filterButton,
-                selectedCategory === category && styles.filterButtonActive,
-              ]}
-              onPress={() => setSelectedCategory(category)}
-            >
-              <Text
-                style={[
-                  styles.filterButtonText,
-                  selectedCategory === category && styles.filterButtonTextActive,
-                ]}
-              >
-                {category.charAt(0).toUpperCase() + category.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
+      {/* Status chips row (Ongoing / Completed / All) */}
+      <View style={styles.statusChipsContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={styles.statusChip}>
+            <Text style={styles.statusChipText}>
+              Ongoing ({ongoingTasks.length})
+            </Text>
+          </View>
+          <View style={styles.statusChip}>
+            <Text style={styles.statusChipText}>
+              Completed ({completedTasks.length})
+            </Text>
+          </View>
+          <View style={styles.statusChip}>
+            <Text style={styles.statusChipText}>
+              All ({totalTasksCount})
+            </Text>
+          </View>
         </ScrollView>
       </View>
 
@@ -973,7 +970,7 @@ export default function TasksScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#F4F8F3',
   },
   header: {
     flexDirection: 'row',
@@ -984,7 +981,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e9ecef',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 'bold',
   },
   headerButtons: {
@@ -1052,7 +1049,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scrollContent: {
-    padding: 12,
+    padding: 16,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -1315,5 +1312,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  statusChipsContainer: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#F4F8F3',
+  },
+  statusChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#2E7D32',
+    marginRight: 8,
+    backgroundColor: '#FFFFFF',
+  },
+  statusChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#2E7D32',
   },
 });
