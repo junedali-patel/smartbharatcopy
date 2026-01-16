@@ -20,6 +20,7 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 let db: any = null;
 let auth: any = null;
 let messaging: any = null;
+let functions: any = null;
 let isInitialized = false;
 
 const initializeServices = () => {
@@ -31,9 +32,11 @@ const initializeServices = () => {
       // Web platform - safe to use full Firebase
       const { getFirestore } = require('firebase/firestore');
       const { getAuth: FirebaseGetAuth } = require('firebase/auth');
+      const { getFunctions } = require('firebase/functions');
       
       db = getFirestore(app);
       auth = FirebaseGetAuth(app);
+      functions = getFunctions(app);
       
       // Skip Firebase Messaging on web as it's not supported
       messaging = null;
@@ -43,9 +46,11 @@ const initializeServices = () => {
         const { getFirestore } = require('firebase/firestore');
         const { initializeAuth, getReactNativePersistence } = require('firebase/auth');
         const { getAuth: FirebaseGetAuth } = require('firebase/auth');
+        const { getFunctions } = require('firebase/functions');
         const AsyncStorage = require('@react-native-async-storage/async-storage').default;
         
         db = getFirestore(app);
+        functions = getFunctions(app);
         
         try {
           auth = initializeAuth(app, {
@@ -65,6 +70,7 @@ const initializeServices = () => {
         // Gracefully degrade - these will be null on Expo Go
         db = null;
         auth = null;
+        functions = null;
       }
     }
   } catch (error) {
@@ -94,7 +100,14 @@ const getMessaging = () => {
   return messaging;
 };
 
-export { getDb, getAuth, getMessaging, app as default };
+const getFunctionsInstance = () => {
+  if (!isInitialized) {
+    initializeServices();
+  }
+  return functions;
+};
+
+export { getDb, getAuth, getMessaging, getFunctionsInstance as functions, app as default };
 
 // Re-export auth functions for convenience
 export { onAuthStateChanged } from 'firebase/auth';

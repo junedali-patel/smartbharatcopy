@@ -118,14 +118,13 @@ async function sendMessage() {
                 </div>
             `);
             
-            let modelMessages = '';
+            let fullModelResponse = '';
 
             for await (const chunk of result.stream) {
               const chunkText = chunk.text();
-              modelMessages = document.querySelectorAll(".chat-window .chat div.model");
-              modelMessages[modelMessages.length - 1].querySelector("p").insertAdjacentHTML("beforeend",`
-                ${chunkText}
-            `);
+              fullModelResponse += chunkText;
+              const modelMessages = document.querySelectorAll(".chat-window .chat div.model");
+              modelMessages[modelMessages.length - 1].querySelector("p").textContent = fullModelResponse;
             }
 
             messages.history.push({
@@ -135,7 +134,7 @@ async function sendMessage() {
 
             messages.history.push({
                 role: "model",
-                parts: [{ text: modelMessages[modelMessages.length - 1].querySelector("p").innerHTML }],
+                parts: [{ text: fullModelResponse }],
             });
 
         } catch (error) {

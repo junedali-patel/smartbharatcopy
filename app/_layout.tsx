@@ -1,5 +1,5 @@
 import { Stack } from 'expo-router';
-import { useColorScheme } from 'react-native';
+import { useColorScheme, LogBox, Platform } from 'react-native';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
@@ -7,6 +7,11 @@ import { useEffect } from 'react';
 import { AuthProvider } from '../contexts/AuthContext';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { auth, db } from '../services/firebase'; // Import Firebase instances
+
+// Suppress native animation driver warning on web (expected and non-blocking)
+if (Platform.OS === 'web') {
+  LogBox.ignoreLogs(['Animated: `useNativeDriver` is not supported']);
+}
 
 // Ensure Firebase is initialized
 if (!auth || !db) {

@@ -9,6 +9,7 @@ import { useThemeColor } from '../../hooks/useThemeColor';
 import VoiceService from '../../services/VoiceService';
 import { GEMINI_API_KEY, isGeminiAvailable, getGeminiModel } from '../../constants/config';
 import FirebaseTaskService, { Task } from '../../services/firebaseTaskService';
+import LocalTaskService from '../../services/taskService';
 import NotificationService from '../../services/notificationService';
 import UserService from '../../services/userService';
 import { getAuth, onAuthStateChanged } from '../../config/firebase';
@@ -56,8 +57,9 @@ export default function TasksScreen() {
   const categories: ('all' | 'farming' | 'personal' | 'general')[] = ['all', 'farming', 'personal', 'general'];
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  // Initialize FirebaseTaskService
+  // Initialize FirebaseTaskService and local TaskService
   const taskService = useMemo(() => FirebaseTaskService.getInstance(), []);
+  const localTaskService = useMemo(() => LocalTaskService.getInstance(), []);
 
   useEffect(() => {
     console.log('TasksScreen: Setting up auth listener');
@@ -303,6 +305,29 @@ export default function TasksScreen() {
       setError(null);
       
       const model = getGeminiModel(genAI);
+
+      // Check if user is authenticated first
+      const auth = getAuth();
+      const directUser = auth?.currentUser;
+      const isAuthenticated = !!(currentUser?.uid || directUser?.uid);
+      
+      // Fast local parse: attempt a quick parse locally to avoid waiting on Gemini
+      // But ONLY use it as-is if user is NOT authenticated; otherwise fall through to AI for full processing
+      if (!isAuthenticated) {
+        try {
+          const localParsed = localTaskService.parseTaskFromText(command);
+          if (localParsed && localParsed.title && localParsed.title.trim().length > 0) {
+            const addedLocal = await localTaskService.addTask(localParsed as any);
+            setAssistantResponse(`Task saved locally: "${addedLocal.title}"`);
+            await stopListening();
+            setIsProcessing(false);
+            return;
+          }
+        } catch (e) {
+          console.warn('Local parse for unauthenticated user failed', e);
+        }
+      }
+      // If authenticated, skip the fast parse and go directly to AI + Firebase for accurate processing
       
       // First check if this is a task completion command
       const completionPatterns = [
@@ -546,26 +571,58 @@ export default function TasksScreen() {
         console.log('TasksScreen: Final task data for Firebase:', newTaskData);
         
         try {
-          console.log('TasksScreen: Attempting to add task to Firebase...');
+          console.log('TasksScreen.processCommand: Attempting to add task to Firebase...', {
+            userId: currentUser?.uid || directUser?.uid,
+            taskTitle: newTaskData.title,
+            taskData: newTaskData,
+            timestamp: new Date().toISOString()
+          });
+          
           const addedTask = await taskService.addTask(newTaskData);
-          console.log('TasksScreen: Chatbot task added to Firebase:', addedTask);
+          console.log('TasksScreen.processCommand: Task added response from service:', {
+            taskId: addedTask.id,
+            taskTitle: addedTask.title,
+            taskUserId: addedTask.userId,
+            timestamp: new Date().toISOString()
+          });
           
           // Verify the task was actually added by fetching tasks again
           const verificationTasks = await taskService.getTasks();
-          console.log('TasksScreen: Verification - total tasks in Firebase:', verificationTasks.length);
+          console.log('TasksScreen.processCommand: Verification - fetched tasks:', {
+            totalTasks: verificationTasks.length,
+            taskIds: verificationTasks.map(t => t.id),
+            taskTitles: verificationTasks.map(t => t.title),
+            timestamp: new Date().toISOString()
+          });
+          
           const foundTask = verificationTasks.find(t => t.id === addedTask.id);
-          console.log('TasksScreen: Verification - task found in Firebase:', !!foundTask);
+          console.log('TasksScreen.processCommand: Verification - task found in list:', !!foundTask, {
+            taskId: addedTask.id,
+            timestamp: new Date().toISOString()
+          });
           
           if (!foundTask) {
-            console.error('TasksScreen: Task was not found in Firebase after adding!');
+            console.error('TasksScreen.processCommand: Task was not found in Firebase after adding!', {
+              expectedId: addedTask.id,
+              taskReturnedUserId: addedTask.userId,
+              timestamp: new Date().toISOString()
+            });
             setError('Task was not saved to database. Please try again.');
             return;
           }
           
           // Refresh tasks to show the newly added task
+          console.log('TasksScreen.processCommand: Refreshing task list after successful add...');
           await refreshTasks();
+          console.log('TasksScreen.processCommand: Task refresh complete');
         } catch (addError) {
-          console.error('TasksScreen: Error adding chatbot task to Firebase:', addError);
+          console.error('TasksScreen.processCommand: Error adding task to Firebase:', {
+            error: addError,
+            errorMessage: (addError as any)?.message,
+            taskData: newTaskData,
+            userId: currentUser?.uid || directUser?.uid,
+            timestamp: new Date().toISOString()
+          });
           setError('Failed to add task to database. Please try again.');
           return;
         }
@@ -580,12 +637,18 @@ export default function TasksScreen() {
         Keep the response friendly and concise.`;
         
         const responseResult = await model?.generateContent(responsePrompt);
-        const responseText = await responseResult?.response.text() || '';
+        let responseText = await responseResult?.response.text() || '';
+        
+        // Strip markdown symbols and special characters before speaking
+        responseText = responseText
+          .replace(/[*_#`~\[\](){}]/g, '') // Remove markdown
+          .replace(/[!?]/g, '.') // Replace punctuation with periods
+          .trim();
         
         setAssistantResponse(responseText);
         
-        // Speak the response
-        if (Platform.OS !== 'web' && responseText) {
+        // Speak the response (on web, skip TTS to avoid symbol reading)
+        if (responseText && Platform.OS !== 'web') {
           Speech.speak(responseText, {
             language: 'en',
             pitch: 1.0,

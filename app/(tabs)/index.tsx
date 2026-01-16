@@ -483,6 +483,24 @@ export default function HomeScreen() {
     router.push(route);
   };
 
+  // DEPRECATED: isFarmingRelated removed - Gemini handles filtering now
+  // const isFarmingRelated = (text: string): boolean => {
+    const farmingKeywords = [
+      'farm', 'crop', 'agriculture', 'soil', 'irrigation', 'seed', 'fertilizer', 'pest', 
+      'disease', 'harvest', 'sowing', 'season', 'weather', 'rain', 'sun', 'farmer', 'field',
+      'cultivat', 'plant', 'grow', 'fertiliz', 'compost', 'organic', 'mandi', 'price',
+      'subsidy', 'scheme', 'government', 'kheti', 'fisher', 'fish', 'aqua', 'livestock', 'animal', 'poultry',
+      'पौध', 'खेत', 'मिट्टी', 'बीज', 'कीटनाशक', 'मछली', 'पशु', 'पालन',
+      'फसल', 'सिंचाई', 'जैव', 'उर्वरक', 'योजना', 'सरकार', 'कटाई', 'बुवाई',
+      'ಫಸಲ್', 'ಕೃಷಿ', 'ಬೀಜ', 'ಸಾರ', 'ನೀರುನಿರ್ವಹಣೆ', 'ರೋಗ', 'ಮೀನು', 'ಪಶು',
+      'પાક', 'ખેતર', 'બીજ', 'ખેતી', 'ખાતર', 'માછલી',
+      'পাট', 'ফসল', 'বীজ', 'মাটি', 'সার', 'মাছ', 'পশु'
+    ];
+    
+    // Removed - Gemini handles filtering now
+
+  // Get non-farming response in multiple languages - DEPRECATED (Gemini handles it now)
+
   const getGeminiResponse = async (prompt: string) => {
     try {
       if (!genAI) {
@@ -490,7 +508,7 @@ export default function HomeScreen() {
       }
 
       // Check if this is a greeting and if we've already introduced
-      const isGreeting = /^(नमस्ते|hello|hi|namaste|नमस्कार|ਸਤ ਸ੍ਰੀ ਅਕਾਲ|નમસ્તે|নমস্কার|ನಮಸ್ಕಾರ)/i.test(prompt.trim());
+      const isGreeting = /^(नमस्ते|hello|hi|namaste|नमस्कार|ਸਤ ਸ੍ਰੀ ਅਕਾਲ|નમસ્તે|নমস্કার|ನಮಸ್ಕಾರ)/i.test(prompt.trim());
       
       // Set introduction flag if this is the first greeting
       if (isGreeting && !hasIntroduced) {
@@ -510,12 +528,45 @@ export default function HomeScreen() {
       };
       setChatHistory((prev: ChatMessage[]) => [...prev, userMessage]);
 
-      // Create chat session with history
+      // System prompt for agricultural assistant - Gemini will evaluate if question is farming-related
+      const systemPrompt = `You are a specialized agricultural assistant for Smart Bharat, helping Indian farmers with farming and agriculture topics ONLY.
+
+IMPORTANT: You MUST ONLY answer questions about:
+- Agriculture, farming, crops, plants, cultivation
+- Livestock, dairy farming, animal husbandry, poultry
+- Fisheries, aquaculture, fish farming
+- Irrigation, soil management, fertilizers, pesticides
+- Weather and farming, agricultural seasons
+- Government schemes, subsidies for farmers
+- Mandi prices, agricultural economics
+- Horticulture, organic farming, composting
+- Related rural development topics
+
+For ANY non-agricultural topic:
+- Politely decline and say you can only help with farming and agriculture questions
+- Do NOT provide information on non-farming topics
+- Suggest they ask an agriculture-related question instead
+
+Your responses should be natural, helpful, and in the same language as the user's query.
+
+User's question: "${prompt}"`;
+
+      // Create chat session with history and system prompt
       const chat = model.startChat({
-        history: chatHistory.map(msg => ({
-          role: msg.role,
-          parts: msg.parts
-        }))
+        history: [
+          {
+            role: 'user',
+            parts: [{ text: systemPrompt }]
+          },
+          {
+            role: 'model',
+            parts: [{ text: 'I understand. I will only answer agriculture and farming related questions for Indian farmers. I will decline non-farming topics politely.' }]
+          },
+          ...chatHistory.map(msg => ({
+            role: msg.role,
+            parts: msg.parts
+          }))
+        ]
       });
 
       // Send message and get stream
@@ -550,6 +601,7 @@ export default function HomeScreen() {
         
         // Navigate to schemes tab with the detected scheme ID after speech completes
         setTimeout(() => {
+          handleAssistantVisibility(false); // Close chat window
           router.push({
             pathname: '/schemes',
             params: { 
@@ -593,6 +645,9 @@ export default function HomeScreen() {
       setIsProcessing(true);
       const response = await getGeminiResponse(message);
       setAssistantResponse(response);
+      
+      // getGeminiResponse already adds messages to chat history, no need to add again
+      
       setTranscript(''); // Clear the input after sending
       if (!isMuted) {
         await speakResponse(response);
@@ -610,6 +665,9 @@ export default function HomeScreen() {
       setIsProcessing(true);
       const response = await getGeminiResponse(command);
       setAssistantResponse(response);
+      
+      // getGeminiResponse already adds messages to chat history, no need to add again
+      
       setTranscript(''); // Clear the input after processing voice command
       if (!isMuted) {
         await speakResponse(response);
@@ -709,15 +767,8 @@ export default function HomeScreen() {
   const speakResponse = async (text: string) => {
     try {
       if (voiceService.current) {
-        // Split text into sentences for better speech handling
-        const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
-        
-        // Speak each sentence with a small delay
-        for (const sentence of sentences) {
-          await voiceService.current.speak(sentence.trim());
-          // Add a small pause between sentences
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
+        // Speak the entire text at once for smooth, continuous speech (no stuttering)
+        await voiceService.current.speak(text.trim());
       }
     } catch (error) {
       console.error('Error speaking response:', error);
@@ -999,93 +1050,185 @@ export default function HomeScreen() {
         <MaterialIcons name="chat" size={32} color="white" />
       </TouchableOpacity>
 
-      {/* Chat Window */}
+      {/* Chat Window - Bottom Sheet Modal */}
       <Modal
         visible={isAssistantVisible}
         animationType="slide"
         transparent={true}
         onRequestClose={() => handleAssistantVisibility(false)}
       >
-        <View style={[styles.chatWindow, isAssistantVisible && styles.chatOpen]}>
-          <View style={styles.chatHeader}>
-            <Text style={{ color: '#333', fontSize: 16, fontWeight: 'bold' }}>Smart Assistant</Text>
-            <View style={styles.chatControls}>
-              <TouchableOpacity onPress={() => setShowLanguageSelector(!showLanguageSelector)}>
-                <MaterialIcons name="language" size={22} color="#555" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={toggleMute}>
-                <MaterialIcons name={isMuted ? 'volume-off' : 'volume-up'} size={22} color="#555" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={clearChat}>
-                <MaterialIcons name="delete" size={22} color="#555" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => handleAssistantVisibility(false)}>
-                <MaterialIcons name="close" size={22} color="#555" />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {showLanguageSelector && (
-            <View style={styles.languageSelector}>
-              {languages.map((lang) => (
-                <TouchableOpacity
-                  key={lang.code}
-                  style={[
-                    styles.languageOption,
-                    selectedLanguage === lang.code && styles.selectedLanguage
-                  ]}
-                  onPress={() => {
-                    setSelectedLanguage(lang.code);
-                    setShowLanguageSelector(false);
-                  }}
+        <BlurView intensity={90} style={styles.chatBlurOverlay}>
+          <TouchableOpacity 
+            style={styles.chatOverlayTouchable}
+            onPress={() => handleAssistantVisibility(false)}
+            activeOpacity={1}
+          />
+        </BlurView>
+        
+        <View style={styles.chatModalContainer}>
+          <View style={styles.chatModalContent}>
+            {/* Header */}
+            <View style={styles.chatModalHeader}>
+              <View style={styles.chatHeaderLeft}>
+                <View style={styles.chatBotIconContainer}>
+                  <MaterialIcons name="smart-toy" size={24} color="#2E7D32" />
+                </View>
+                <View>
+                  <Text style={styles.chatBotTitle}>Smart Assistant</Text>
+                </View>
+              </View>
+              
+              <View style={styles.chatHeaderControls}>
+                <TouchableOpacity 
+                  style={styles.chatControlButton}
+                  onPress={() => setShowLanguageSelector(!showLanguageSelector)}
                 >
-                  <Text style={[
-                    styles.languageText,
-                    selectedLanguage === lang.code && styles.selectedLanguageText
-                  ]}>
-                    {lang.name}
+                  <MaterialIcons name="language" size={22} color="#666" />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.chatControlButton}
+                  onPress={toggleMute}
+                >
+                  <MaterialIcons 
+                    name={isMuted ? 'volume-off' : 'volume-up'} 
+                    size={22} 
+                    color="#666" 
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.chatControlButton}
+                  onPress={clearChat}
+                >
+                  <MaterialIcons name="delete-outline" size={22} color="#666" />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.chatControlButton, styles.chatCloseButton]}
+                  onPress={() => handleAssistantVisibility(false)}
+                >
+                  <MaterialIcons name="close" size={22} color="#666" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Language Selector */}
+            {showLanguageSelector && (
+              <View style={styles.chatLanguageBar}>
+                <ScrollView 
+                  horizontal 
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.chatLanguageScroll}
+                >
+                  {languages.map((lang) => (
+                    <TouchableOpacity
+                      key={lang.code}
+                      style={[
+                        styles.chatLanguageButton,
+                        selectedLanguage === lang.code && styles.chatLanguageButtonActive
+                      ]}
+                      onPress={() => {
+                        setSelectedLanguage(lang.code);
+                        setShowLanguageSelector(false);
+                      }}
+                    >
+                      <Text style={[
+                        styles.chatLanguageButtonText,
+                        selectedLanguage === lang.code && styles.chatLanguageButtonTextActive
+                      ]}>
+                        {lang.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Chat Messages */}
+            <ScrollView style={styles.chatMessagesArea}>
+              {!hasIntroduced && !chatHistory.length && (
+                <View style={styles.chatWelcomeMessage}>
+                  <View style={styles.chatWelcomeIcon}>
+                    <MaterialIcons name="emoji-emotions" size={48} color="#2E7D32" />
+                  </View>
+                  <Text style={styles.chatWelcomeTitle}>नमस्ते! How can I help?</Text>
+                  <Text style={styles.chatWelcomeSubtitle}>
+                    Ask me about crop yields, weather, or government schemes
+                  </Text>
+                </View>
+              )}
+              
+              {chatHistory.map((message, index) => (
+                <ChatMessage key={index} message={message} index={index} />
+              ))}
+              {isProcessing && (
+                <View style={styles.chatLoadingContainer}>
+                  <ActivityIndicator size="small" color="#2E7D32" />
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Quick Action Buttons */}
+            {!chatHistory.length && (
+              <View style={styles.chatQuickActions}>
+                <TouchableOpacity 
+                  style={styles.chatQuickButton}
+                  onPress={() => handleSendMessage('How to apply for PM Kisan?')}
+                >
+                  <Text style={styles.chatQuickButtonText}>How to apply?</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.chatQuickButton}
+                  onPress={() => handleSendMessage('Check subsidy status')}
+                >
+                  <Text style={styles.chatQuickButtonText}>Check status</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.chatQuickButton}
+                  onPress={() => handleSendMessage('List of beneficiaries')}
+                >
+                  <Text style={styles.chatQuickButtonText}>Beneficiary list</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Input Area */}
+            <View style={styles.chatInputContainer}>
+              <View style={styles.chatInputArea}>
+                <TextInput
+                  style={styles.chatInput}
+                  placeholder="कृपया अपना प्रश्न पूछें..."
+                  placeholderTextColor="#999"
+                  value={transcript}
+                  onChangeText={setTranscript}
+                  onSubmitEditing={() => handleSendMessage(transcript)}
+                />
+                <TouchableOpacity style={styles.chatAttachButton}>
+                  <MaterialIcons name="attach-file" size={20} color="#999" />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.chatButtonsGroup}>
+                <TouchableOpacity
+                  style={[styles.chatMicButton, isListening && styles.chatMicButtonActive]}
+                  onPress={handleMicPress}
+                >
+                  <MaterialIcons
+                    name="mic"
+                    size={24}
+                    color="white"
+                  />
+                  <Text style={styles.chatMicButtonText}>
+                    {languages.find(lang => lang.code === selectedLanguage)?.code?.toUpperCase() || 'EN'}
                   </Text>
                 </TouchableOpacity>
-              ))}
+                
+                <TouchableOpacity
+                  style={styles.chatSendButton}
+                  onPress={() => handleSendMessage(transcript)}
+                >
+                  <MaterialIcons name="send" size={20} color="white" />
+                </TouchableOpacity>
+              </View>
             </View>
-          )}
-
-          <ScrollView style={styles.chat}>
-            {chatHistory.map((message, index) => (
-              <ChatMessage key={index} message={message} index={index} />
-            ))}
-            {isProcessing && (
-              <View style={styles.loader} />
-            )}
-          </ScrollView>
-
-          <View style={styles.inputArea}>
-            <TextInput
-              style={styles.input}
-              placeholder="कृपया अपना प्रश्न पूछें..."
-              value={transcript}
-              onChangeText={setTranscript}
-              onSubmitEditing={() => handleSendMessage(transcript)}
-            />
-            <TouchableOpacity
-              style={[styles.voiceButton, isListening && styles.voiceButtonActive]}
-              onPress={handleMicPress}
-            >
-              <MaterialIcons
-                name={isListening ? 'mic' : 'mic-none'}
-                size={24}
-                color="white"
-              />
-              <Text style={styles.voiceButtonText}>
-                {languages.find(lang => lang.code === selectedLanguage)?.name || 'हिंदी'}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.sendButton}
-              onPress={() => handleSendMessage(transcript)}
-            >
-              <MaterialIcons name="send" size={24} color="white" />
-            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1311,6 +1454,8 @@ const CommandItem = ({ icon, text = '', color }: CommandItemProps) => {
 const ChatMessage = ({ message, index }: { message: ChatMessage; index: number }) => {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(20)).current;
+  const isUser = message.role === 'user';
+  const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
   useEffect(() => {
     Animated.parallel([
@@ -1328,18 +1473,46 @@ const ChatMessage = ({ message, index }: { message: ChatMessage; index: number }
   }, []);
 
   return (
-    <Animated.Text
+    <Animated.View
       style={[
-        styles.messageText,
-        message.role === 'user' ? styles.userMessage : styles.modelMessage,
+        styles.chatMessageWrapper,
+        isUser ? styles.userMessageWrapper : styles.assistantMessageWrapper,
         {
           opacity,
           transform: [{ translateY }]
         }
       ]}
     >
-      {message.parts[0].text}
-    </Animated.Text>
+      {!isUser && (
+        <View style={styles.avatarContainer}>
+          <MaterialIcons name="home" size={20} color="#2E7D32" />
+        </View>
+      )}
+      
+      <View style={[
+        styles.messageBubble,
+        isUser ? styles.userBubble : styles.assistantBubble
+      ]}>
+        <Text style={[
+          styles.messageContent,
+          isUser ? styles.userMessageText : styles.assistantMessageText
+        ]}>
+          {message.parts[0].text}
+        </Text>
+        <Text style={[
+          styles.messageTime,
+          isUser ? styles.userMessageTime : styles.assistantMessageTime
+        ]}>
+          {currentTime}
+        </Text>
+      </View>
+
+      {isUser && (
+        <View style={styles.userAvatarContainer}>
+          <MaterialIcons name="person" size={20} color="#ffffff" />
+        </View>
+      )}
+    </Animated.View>
   );
 };
 
@@ -1582,17 +1755,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
-  },
-  voiceButton: {
-    padding: 12,
-    borderRadius: 25,
-    backgroundColor: '#2E7D32',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  voiceButtonActive: {
-    backgroundColor: '#FF3B30',
-    transform: [{ scale: 1.1 }],
   },
   stopButton: {
     padding: 8,
@@ -2107,12 +2269,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'transparent',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    padding: 12,
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#e9ecef',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   chatControls: {
     flexDirection: 'row',
@@ -2135,6 +2302,67 @@ const styles = StyleSheet.create({
     color: 'white',
     alignSelf: 'flex-end',
   },
+  chatMessageWrapper: {
+    flexDirection: 'row',
+    marginVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  userMessageWrapper: {
+    justifyContent: 'flex-end',
+  },
+  assistantMessageWrapper: {
+    justifyContent: 'flex-start',
+  },
+  avatarContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  userAvatarContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#2E7D32',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  messageBubble: {
+    maxWidth: '75%',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+  },
+  userBubble: {
+    backgroundColor: '#2E7D32',
+  },
+  assistantBubble: {
+    backgroundColor: '#f0f0f0',
+  },
+  messageContent: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  userMessageText: {
+    color: '#ffffff',
+  },
+  assistantMessageText: {
+    color: '#333333',
+  },
+  messageTime: {
+    fontSize: 12,
+    marginTop: 6,
+  },
+  userMessageTime: {
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  assistantMessageTime: {
+    color: '#999999',
+  },
   errorMessage: {
     fontSize: 14,
     textAlign: 'center',
@@ -2142,33 +2370,34 @@ const styles = StyleSheet.create({
   },
   inputArea: {
     height: 'auto',
-    minHeight: 60,
+    minHeight: 70,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: '#e9ecef',
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    backgroundColor: '#ffffff',
+    gap: 10,
   },
   input: {
-    height: 40,
+    height: 48,
     flex: 1,
     borderWidth: 1,
     borderColor: '#ced4da',
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    paddingLeft: 16,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 24,
+    paddingLeft: 20,
     paddingRight: 16,
     fontSize: 14,
+    color: '#333',
   },
   sendButton: {
-    height: 40,
-    width: 40,
-    borderRadius: 20,
+    height: 48,
+    width: 48,
+    borderRadius: 24,
     borderWidth: 0,
-    marginLeft: 8,
     backgroundColor: '#2E7D32',
     justifyContent: 'center',
     alignItems: 'center',
@@ -2178,14 +2407,53 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 4,
   },
+  voiceButton: {
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#2E7D32',
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  voiceButtonText: {
+    color: '#ffffff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  voiceButtonActive: {
+    backgroundColor: '#FF3B30',
+    transform: [{ scale: 1.05 }],
+  },
   loader: {
     width: 40,
     height: 40,
   },
   chat: {
     flex: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 0,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: '#ffffff',
+  },
+  assistantResponseBox: {
+    marginHorizontal: 12,
+    marginVertical: 16,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#2E7D32',
+    backgroundColor: '#F0F7F0',
+  },
+  assistantResponseText: {
+    fontSize: 15,
+    lineHeight: 24,
+    fontWeight: '500',
   },
   languageContainer: {
     marginBottom: 24,
@@ -2728,11 +2996,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  weatherDetailsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
   weatherDetailCard: {
     flex: 1,
     minWidth: '45%',
@@ -2800,5 +3063,243 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#888',
     fontWeight: '500',
+  },
+
+  // New Chat Modal Styles - Bottom Sheet
+  chatBlurOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
+  chatOverlayTouchable: {
+    flex: 1,
+  },
+  chatModalContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '85%',
+    backgroundColor: 'transparent',
+  },
+  chatModalContent: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 40,
+    overflow: 'hidden',
+    flexDirection: 'column',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 20,
+  },
+  chatModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.08)',
+    backgroundColor: '#FFFFFF',
+  },
+  chatHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  chatBotIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(45, 106, 79, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  chatBotTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    letterSpacing: -0.3,
+  },
+  chatHeaderControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  chatControlButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+  },
+  chatCloseButton: {
+    marginLeft: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.06)',
+  },
+  chatLanguageBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.08)',
+    backgroundColor: '#FAFAFA',
+  },
+  chatLanguageScroll: {
+    marginHorizontal: -16,
+    paddingHorizontal: 16,
+  },
+  chatLanguageButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    backgroundColor: '#F0F0F0',
+    borderWidth: 1,
+    borderColor: '#E8E8E8',
+  },
+  chatLanguageButtonActive: {
+    backgroundColor: '#2E7D32',
+    borderColor: '#2E7D32',
+  },
+  chatLanguageButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666',
+  },
+  chatLanguageButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  chatMessagesArea: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+  },
+  chatWelcomeMessage: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+  },
+  chatWelcomeIcon: {
+    marginBottom: 16,
+  },
+  chatWelcomeTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  chatWelcomeSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    paddingHorizontal: 24,
+    lineHeight: 20,
+  },
+  chatLoadingContainer: {
+    paddingVertical: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  chatQuickActions: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.08)',
+    backgroundColor: '#FAFAFA',
+  },
+  chatQuickButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 20,
+    backgroundColor: '#F0F0F0',
+    borderWidth: 1,
+    borderColor: '#E8E8E8',
+    alignItems: 'center',
+  },
+  chatQuickButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#333',
+  },
+  chatInputContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.08)',
+    backgroundColor: '#FFFFFF',
+  },
+  chatInputArea: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#E8E8E8',
+  },
+  chatInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: '#333',
+    backgroundColor: 'transparent',
+  },
+  chatAttachButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  chatButtonsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  chatMicButton: {
+    width: 64,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#2E7D32',
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'column',
+    shadowColor: '#2E7D32',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  chatMicButtonActive: {
+    backgroundColor: '#FF3B30',
+    shadowColor: '#FF3B30',
+  },
+  chatMicButtonText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+    marginTop: 2,
+    letterSpacing: 0.5,
+  },
+  chatSendButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#2E7D32',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#2E7D32',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
   },
 });

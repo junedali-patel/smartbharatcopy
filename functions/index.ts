@@ -18,7 +18,7 @@ interface TaskNotificationData {
   userId: string;
 }
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+const genAI = new GoogleGenerativeAI('AIzaSyATFG-N_HT4IFm8SHGLnlAFtH_7fzqB_j0');
 
 // Helper to try multiple models with fallback
 const getWorkingModel = (genAI: GoogleGenerativeAI) => {
@@ -137,6 +137,80 @@ export const sendTaskNotification = onCall(async (request) => {
     return { success: true, message: 'Notification sent successfully' };
   } catch (error) {
     console.error('Error sending task notification:', error);
+    throw new Error("Failed to send notification");
+  }
+});
+
+// Cloud Function to send booking notifications
+export const sendBookingNotification = onCall(async (request) => {
+  const { data } = request;
+  
+  if (!data.ownerId || !data.renterName || !data.equipmentName) {
+    throw new Error("Owner ID, renter name, and equipment name are required");
+  }
+
+  try {
+    // Get owner's FCM tokens from Firestore
+    const ownerDoc = await admin.firestore().collection('users').doc(data.ownerId).get();
+    if (!ownerDoc.exists) {
+      console.log('Owner document not found:', data.ownerId);
+      return { success: false, message: 'Owner not found' };
+    }
+
+    const ownerData = ownerDoc.data();
+    const fcmTokens = ownerData?.fcmTokens || [];
+
+    if (fcmTokens.length === 0) {
+      console.log('No FCM tokens found for owner:', data.ownerId);
+      return { success: false, message: 'No FCM tokens found' };
+    }
+
+    // Prepare notification message
+    const message = {
+      notification: {
+        title: 'New Booking Request!',
+        body: `${data.renterName} requested to book your ${data.equipmentName}`,
+      },
+      data: {
+        bookingId: data.bookingId || '',
+        renterName: data.renterName,
+        equipmentName: data.equipmentName,
+        type: 'booking_request',
+      },
+      android: {
+        notification: {
+          sound: 'default',
+          priority: 'high' as const,
+        },
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: 'default',
+            badge: 1,
+            alert: {
+              title: 'New Booking Request!',
+              body: `${data.renterName} requested to book your ${data.equipmentName}`,
+            },
+          },
+        },
+      },
+    };
+
+    // Send to all owner's devices
+    const sendPromises = fcmTokens.map((token: string) =>
+      admin.messaging().send({
+        ...message,
+        token,
+      })
+    );
+
+    await Promise.all(sendPromises);
+    console.log(`Sent booking notification for equipment ${data.equipmentName} to ${fcmTokens.length} devices`);
+
+    return { success: true, message: 'Notification sent successfully' };
+  } catch (error) {
+    console.error('Error sending booking notification:', error);
     throw new Error("Failed to send notification");
   }
 });

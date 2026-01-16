@@ -1,6 +1,7 @@
 import { doc, collection, addDoc, updateDoc, deleteDoc, getDocs, getDoc, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { getDb, getAuth } from '../config/firebase';
 import NotificationService from './notificationService';
+import LocalTaskService from './taskService';
 
 // Define Task interface
 export interface Task {
@@ -43,7 +44,13 @@ class FirebaseTaskService {
   private getCurrentUserId(): string | null {
     const authInstance = getAuth();
     const userId = authInstance?.currentUser?.uid || null;
-    console.log('FirebaseTaskService: getCurrentUserId - authInstance:', !!authInstance, 'currentUser:', !!authInstance?.currentUser, 'uid:', userId);
+    console.log('FirebaseTaskService.getCurrentUserId():', {
+      hasAuth: !!authInstance,
+      hasCurrentUser: !!authInstance?.currentUser,
+      uid: userId,
+      email: authInstance?.currentUser?.email,
+      timestamp: new Date().toISOString()
+    });
     return userId;
   }
 
@@ -106,11 +113,47 @@ class FirebaseTaskService {
   // Add a new task
   public async addTask(taskData: Partial<Task>): Promise<Task> {
     const userId = this.getCurrentUserId();
+    // If no authenticated user, fall back to local AsyncStorage-based TaskService
     if (!userId) {
-      throw new Error('User not authenticated');
+      console.error('FirebaseTaskService.addTask: No authenticated user ID! Falling back to local storage.', {
+        taskData,
+        timestamp: new Date().toISOString()
+      });
+      try {
+        const local = LocalTaskService.getInstance();
+        const localTask = await local.addTask({
+          title: taskData.title || '',
+          priority: (taskData.priority as any) || 'medium',
+          category: (taskData.category as any) || 'general',
+          dueDate: taskData.dueDate,
+          dueTime: taskData.dueTime,
+        });
+
+        // Map local task to Firebase Task shape for callers
+        const fallbackTask: Task = {
+          id: String(localTask.id),
+          userId: 'local',
+          title: localTask.title,
+          priority: localTask.priority,
+          category: localTask.category as any,
+          dueDate: localTask.dueDate,
+          dueTime: localTask.dueTime,
+          completed: localTask.completed,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        return fallbackTask;
+      } catch (err) {
+        console.error('FirebaseTaskService: Local fallback failed:', err);
+        throw new Error('User not authenticated');
+      }
     }
 
-    console.log('FirebaseTaskService: Adding task with data:', taskData);
+    console.log('FirebaseTaskService.addTask: Adding task for user', userId, {
+      taskTitle: taskData.title,
+      timestamp: new Date().toISOString()
+    });
     console.log('FirebaseTaskService: Current date:', new Date().toISOString().split('T')[0]);
 
     const task: Omit<Task, 'id'> = {
@@ -130,7 +173,12 @@ class FirebaseTaskService {
     const docRef = await addDoc(collection(this.getDbInstance(), 'tasks'), task);
     const createdTask = { id: docRef.id, ...task };
     
-    console.log('FirebaseTaskService: Added task with ID:', docRef.id);
+    console.log('FirebaseTaskService.addTask: Successfully added task to Firebase', {
+      taskId: docRef.id,
+      userId,
+      taskTitle: createdTask.title,
+      timestamp: new Date().toISOString()
+    });
 
     // Schedule notification for the new task
     try {
@@ -148,7 +196,10 @@ class FirebaseTaskService {
   public async toggleTaskStatus(taskId: string): Promise<void> {
     const userId = this.getCurrentUserId();
     if (!userId) {
-      throw new Error('User not authenticated');
+      console.warn('FirebaseTaskService: No authenticated user, toggling local task');
+      const local = LocalTaskService.getInstance();
+      await local.toggleTaskStatus(Number(taskId));
+      return;
     }
 
     const taskRef = doc(this.getDbInstance(), 'tasks', taskId);
@@ -173,7 +224,10 @@ class FirebaseTaskService {
   public async deleteTask(taskId: string): Promise<void> {
     const userId = this.getCurrentUserId();
     if (!userId) {
-      throw new Error('User not authenticated');
+      console.warn('FirebaseTaskService: No authenticated user, deleting local task');
+      const local = LocalTaskService.getInstance();
+      await local.deleteTask(Number(taskId));
+      return;
     }
 
     // Verify task belongs to user
@@ -256,7 +310,7 @@ class FirebaseTaskService {
     if (!userId) {
       return [];
     }
- tasksRef = collection(this.getDbInstance(), 'tasks');
+  const tasksRef = collection(this.getDbInstance(), 'tasks');
     let q;
 
     if (category === 'all') {

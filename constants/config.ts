@@ -1,4 +1,5 @@
-export const GEMINI_API_KEY = 'AIzaSyDGzlWAvbh75mP5wS0M8OIM4bZQoWt2h8s';
+// Hardcoded Gemini API key for Smart Bharat app
+export const GEMINI_API_KEY = 'AIzaSyATFG-N_HT4IFm8SHGLnlAFtH_7fzqB_j0';
 
 // List of Gemini models to try in order (fallback chain)
 export const GEMINI_MODELS = [

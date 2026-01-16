@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, ScrollView, ActivityIndicator, Alert, Platform, Linking } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { BACKEND_BASE_URL } from '../constants/config';
+import { BACKEND_BASE_URL, GEMINI_API_KEY } from '../constants/config';
 
 // Hugging Face Inference API URLs for plant disease detection
 const HF_API_URL = 'https://api-inference.huggingface.co/models/linkanjarad/mobilenet_v2_1.0_224-plant-disease-identification';
@@ -138,7 +138,7 @@ const getGeminiDiseaseInfo = async (diseaseLabel: string) => {
     await new Promise(resolve => setTimeout(resolve, GEMINI_REQUEST_DELAY - timeSinceLastRequest));
   }
 
-  const apiKey = 'AIzaSyDGzlWAvbh75mP5wS0M8OIM4bZQoWt2h8s';
+  const apiKey = 'AIzaSyATFG-N_HT4IFm8SHGLnlAFtH_7fzqB_j0';
   const prompt = `Write a detailed, structured response about the plant disease "${diseaseLabel}" in this format:
 
 ABOUT:

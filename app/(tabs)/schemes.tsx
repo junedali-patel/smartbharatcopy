@@ -7,9 +7,10 @@ import schemesData from '../../constants/schemes.json';
 import { router, useLocalSearchParams } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { GEMINI_API_KEY, isGeminiAvailable, getGeminiModel } from '../../constants/config';
+import { isGeminiAvailable, getGeminiModel } from '../../constants/config';
 
 // Initialize Gemini API
+const GEMINI_API_KEY = 'AIzaSyATFG-N_HT4IFm8SHGLnlAFtH_7fzqB_j0';
 const genAI = isGeminiAvailable() ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
 
 interface Scheme {
@@ -43,6 +44,10 @@ export default function SchemesScreen() {
   const params = useLocalSearchParams();
   const detectedSchemeId = params.schemeId as string;
   const detectedSchemeName = params.schemeName as string;
+  
+  useEffect(() => {
+    console.log('useLocalSearchParams:', { detectedSchemeId, detectedSchemeName, params });
+  }, []);
   
   // Ref for scroll view
   const scrollViewRef = useRef<ScrollView>(null);
@@ -83,28 +88,30 @@ export default function SchemesScreen() {
 
   // Handle detected scheme from chatbot
   useEffect(() => {
+    console.log('Schemes page useEffect triggered');
+    console.log('detectedSchemeId:', detectedSchemeId);
+    console.log('schemes.length:', schemes.length);
+    
     if (detectedSchemeId && schemes.length > 0) {
       const detectedScheme = schemes.find(scheme => scheme.id === detectedSchemeId);
+      console.log('Found scheme:', detectedScheme);
+      
       if (detectedScheme) {
-        // Find the index of the scheme in the filtered list
-        const schemeIndex = filteredSchemes.findIndex(scheme => scheme.id === detectedSchemeId);
-        if (schemeIndex !== -1) {
-          // Scroll to the scheme after a short delay
-          setTimeout(() => {
-            scrollViewRef.current?.scrollTo({
-              y: schemeIndex * 200, // Approximate height of each card
-              animated: true
-            });
-            
-            // Auto-open the details modal after scrolling
-            setTimeout(() => {
-              handleViewDetails(detectedScheme);
-            }, 500);
-          }, 1000);
+        // Immediately open the details modal
+        console.log('Opening scheme details for:', detectedScheme.name);
+        handleViewDetails(detectedScheme);
+      } else {
+        // If not found by ID, try searching by name
+        const schemeByName = schemes.find(s => 
+          s.name.toLowerCase().includes(detectedSchemeName?.toLowerCase() || '')
+        );
+        if (schemeByName) {
+          console.log('Found scheme by name:', schemeByName.name);
+          handleViewDetails(schemeByName);
         }
       }
     }
-  }, [detectedSchemeId, schemes, filteredSchemes]);
+  }, [detectedSchemeId, detectedSchemeName, schemes]);
 
   const getCategoryIcon = (category: string) => {
     switch (category.toLowerCase()) {
@@ -177,8 +184,10 @@ export default function SchemesScreen() {
   };
 
   const handleViewDetails = async (scheme: Scheme) => {
+    console.log('handleViewDetails called with scheme:', scheme.name, 'ID:', scheme.id);
     setSelectedScheme(scheme);
     setIsDetailsModalVisible(true);
+    console.log('Modal visible state set to true');
 
     // If any required information is missing, fetch it from Gemini
     if (scheme.eligibility.length === 0 || scheme.benefits.length === 0 || scheme.documents.length === 0) {
@@ -199,6 +208,7 @@ export default function SchemesScreen() {
         updatedScheme.documents = await getGeminiResponse(scheme.name, 'documents');
       }
       
+      console.log('Updated scheme with Gemini data:', updatedScheme);
       setSelectedScheme(updatedScheme);
     }
   };
@@ -379,68 +389,150 @@ export default function SchemesScreen() {
         )}
       </ScrollView>
 
-      {/* Scheme Details Modal */}
-      <Modal
-        visible={isDetailsModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setIsDetailsModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <BlurView intensity={80} style={[styles.modalContent, { backgroundColor: cardBackground }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: borderColor }]}>
-              <Text style={[styles.modalTitle, { color: textColor }]}>Scheme Details</Text>
-              <TouchableOpacity onPress={() => setIsDetailsModalVisible(false)}>
+      {/* Scheme Details Modal - Bottom Sheet */}
+      {isDetailsModalVisible && (
+        <Modal
+          visible={true}
+          animationType="fade"
+          transparent={true}
+          onRequestClose={() => setIsDetailsModalVisible(false)}
+        >
+          <View style={styles.schemeModalOverlay}>
+            <TouchableOpacity 
+              style={styles.schemeOverlayBackground}
+              onPress={() => setIsDetailsModalVisible(false)}
+              activeOpacity={0.5}
+            />
+            
+            <View style={styles.schemeModalContainer}>
+          <View style={styles.schemeModalContent}>
+            {/* Header */}
+            <View style={styles.schemeModalHeader}>
+              <View style={styles.schemeHeaderLeft}>
+                <View style={[styles.schemeIconContainer, { backgroundColor: `${accentColor}15` }]}>
+                  <FontAwesome name="file-text-o" size={24} color={accentColor} />
+                </View>
+                <View style={styles.schemeHeaderTextContainer}>
+                  <Text style={[styles.schemeModalTitle, { color: textColor }]}>Scheme Details</Text>
+                </View>
+              </View>
+              <TouchableOpacity 
+                style={styles.schemeCloseButton}
+                onPress={() => setIsDetailsModalVisible(false)}
+              >
                 <MaterialIcons name="close" size={24} color={textColor} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBody}>
+            {/* Details Content */}
+            <ScrollView style={styles.schemeModalBody} showsVerticalScrollIndicator={false}>
               {selectedScheme && (
                 <>
-                  <Text style={[styles.detailTitle, { color: textColor }]}>{selectedScheme.name}</Text>
-                  <Text style={[styles.detailCategory, { color: textColor }]}>{selectedScheme.category}</Text>
-                  
-                  <View style={styles.detailSection}>
-                    <Text style={[styles.detailSectionTitle, { color: textColor }]}>Description</Text>
-                    <Text style={[styles.detailText, { color: textColor }]}>{selectedScheme.description}</Text>
+                  {/* Scheme Title */}
+                  <View style={styles.schemeTitleSection}>
+                    <Text style={[styles.schemeDetailTitle, { color: textColor }]}>
+                      {selectedScheme.name}
+                    </Text>
+                    <View style={styles.schemeCategoryBadge}>
+                      <Text style={styles.schemeCategoryText}>{selectedScheme.category}</Text>
+                    </View>
                   </View>
 
-                  <View style={styles.detailSection}>
-                    <Text style={[styles.detailSectionTitle, { color: textColor }]}>Eligibility Criteria</Text>
-                    {selectedScheme.eligibility.map((item, index) => (
-                      <Text key={index} style={[styles.detailText, { color: textColor }]}>• {item}</Text>
-                    ))}
+                  {/* Description */}
+                  <View style={styles.schemeDetailSection}>
+                    <View style={styles.schemeSectionHeader}>
+                      <FontAwesome name="info-circle" size={18} color={accentColor} />
+                      <Text style={[styles.schemeSectionTitle, { color: textColor }]}>Description</Text>
+                    </View>
+                    <View style={styles.schemeDetailBox}>
+                      <Text style={[styles.schemeDetailText, { color: textColor }]}>
+                        {selectedScheme.description}
+                      </Text>
+                    </View>
                   </View>
 
-                  <View style={styles.detailSection}>
-                    <Text style={[styles.detailSectionTitle, { color: textColor }]}>Benefits</Text>
-                    {selectedScheme.benefits.map((item, index) => (
-                      <Text key={index} style={[styles.detailText, { color: textColor }]}>• {item}</Text>
-                    ))}
+                  {/* Eligibility Criteria */}
+                  <View style={styles.schemeDetailSection}>
+                    <View style={styles.schemeSectionHeader}>
+                      <FontAwesome name="check-circle" size={18} color={accentColor} />
+                      <Text style={[styles.schemeSectionTitle, { color: textColor }]}>Eligibility</Text>
+                    </View>
+                    <View style={styles.schemeListContainer}>
+                      {selectedScheme.eligibility && selectedScheme.eligibility.length > 0 ? (
+                        selectedScheme.eligibility.map((item, index) => (
+                          <View key={index} style={styles.schemeListItem}>
+                            <View style={[styles.schemeBullet, { backgroundColor: accentColor }]} />
+                            <Text style={[styles.schemeListText, { color: textColor }]}>{item}</Text>
+                          </View>
+                        ))
+                      ) : (
+                        <Text style={[styles.schemeEmptyText, { color: textColor }]}>
+                          Loading eligibility criteria...
+                        </Text>
+                      )}
+                    </View>
                   </View>
 
-                  <View style={styles.detailSection}>
-                    <Text style={[styles.detailSectionTitle, { color: textColor }]}>Required Documents</Text>
-                    {selectedScheme.documents.map((item, index) => (
-                      <Text key={index} style={[styles.detailText, { color: textColor }]}>• {item}</Text>
-                    ))}
+                  {/* Benefits */}
+                  <View style={styles.schemeDetailSection}>
+                    <View style={styles.schemeSectionHeader}>
+                      <FontAwesome name="gift" size={18} color={accentColor} />
+                      <Text style={[styles.schemeSectionTitle, { color: textColor }]}>Benefits</Text>
+                    </View>
+                    <View style={styles.schemeListContainer}>
+                      {selectedScheme.benefits && selectedScheme.benefits.length > 0 ? (
+                        selectedScheme.benefits.map((item, index) => (
+                          <View key={index} style={styles.schemeListItem}>
+                            <View style={[styles.schemeBullet, { backgroundColor: accentColor }]} />
+                            <Text style={[styles.schemeListText, { color: textColor }]}>{item}</Text>
+                          </View>
+                        ))
+                      ) : (
+                        <Text style={[styles.schemeEmptyText, { color: textColor }]}>
+                          Loading benefits...
+                        </Text>
+                      )}
+                    </View>
                   </View>
 
-                  {selectedScheme.applyLink && (
-                    <TouchableOpacity 
-                      style={[styles.applyButton, { backgroundColor: accentColor }]}
-                      onPress={() => handleApplyNow(selectedScheme)}
-                    >
-                      <Text style={styles.applyButtonText}>Apply Now</Text>
-                    </TouchableOpacity>
-                  )}
+                  {/* Required Documents */}
+                  <View style={styles.schemeDetailSection}>
+                    <View style={styles.schemeSectionHeader}>
+                      <FontAwesome name="file" size={18} color={accentColor} />
+                      <Text style={[styles.schemeSectionTitle, { color: textColor }]}>Required Documents</Text>
+                    </View>
+                    <View style={styles.schemeListContainer}>
+                      {selectedScheme.documents && selectedScheme.documents.length > 0 ? (
+                        selectedScheme.documents.map((item, index) => (
+                          <View key={index} style={styles.schemeListItem}>
+                            <View style={[styles.schemeBullet, { backgroundColor: accentColor }]} />
+                            <Text style={[styles.schemeListText, { color: textColor }]}>{item}</Text>
+                          </View>
+                        ))
+                      ) : (
+                        <Text style={[styles.schemeEmptyText, { color: textColor }]}>
+                          Loading documents...
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Apply Button */}
+                  <TouchableOpacity 
+                    style={[styles.schemeApplyButton, { backgroundColor: accentColor }]}
+                    onPress={() => handleApplyNow(selectedScheme)}
+                  >
+                    <MaterialIcons name="arrow-forward" size={20} color="#fff" />
+                    <Text style={styles.schemeApplyButtonText}>Apply Now</Text>
+                  </TouchableOpacity>
                 </>
               )}
             </ScrollView>
-          </BlurView>
+          </View>
+        </View>
         </View>
       </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -626,6 +718,199 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 24,
     paddingVertical: 16,
+  },
+
+  // New Scheme Modal Styles - Bottom Sheet
+  schemeModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'flex-end',
+    alignItems: 'stretch',
+  },
+  schemeOverlayBackground: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
+  schemeBlurOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
+  schemeOverlayTouchable: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  schemeModalContainer: {
+    width: '100%',
+    height: '90%',
+    backgroundColor: 'transparent',
+    position: 'relative',
+  },
+  schemeModalContent: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 40,
+    overflow: 'hidden',
+    flexDirection: 'column',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 20,
+  },
+  schemeModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.08)',
+    backgroundColor: '#FFFFFF',
+  },
+  schemeHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  schemeHeaderTextContainer: {
+    flex: 1,
+  },
+  schemeIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  schemeModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+  },
+  schemeCloseButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+  },
+  schemeModalBody: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  schemeTitleSection: {
+    marginBottom: 28,
+    marginTop: 8,
+  },
+  schemeDetailTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    marginBottom: 12,
+    letterSpacing: -0.5,
+    lineHeight: 36,
+  },
+  schemeCategoryBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#2E7D3215',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  schemeCategoryText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#2E7D32',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  schemeDetailSection: {
+    marginBottom: 28,
+  },
+  schemeSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 14,
+  },
+  schemeSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+  },
+  schemeDetailBox: {
+    backgroundColor: '#F8F9F8',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(46, 106, 79, 0.1)',
+  },
+  schemeDetailText: {
+    fontSize: 15,
+    lineHeight: 24,
+    fontWeight: '500',
+  },
+  schemeListContainer: {
+    gap: 10,
+  },
+  schemeListItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingVertical: 8,
+  },
+  schemeBullet: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginTop: 8,
+    minWidth: 6,
+  },
+  schemeListText: {
+    fontSize: 14,
+    lineHeight: 22,
+    fontWeight: '500',
+    flex: 1,
+  },
+  schemeEmptyText: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    opacity: 0.6,
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  schemeApplyButton: {
+    flexDirection: 'row',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    marginBottom: 32,
+    gap: 10,
+    shadowColor: '#2E7D32',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  schemeApplyButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.3,
   },
   detailTitle: {
     fontSize: 26,

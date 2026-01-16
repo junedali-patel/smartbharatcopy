@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { GEMINI_API_KEY, isGeminiAvailable, getGeminiModel } from '../constants/config';
+import { isGeminiAvailable, getGeminiModel } from '../constants/config';
 import { Alert, Platform } from 'react-native';
 import * as Speech from 'expo-speech';
 
@@ -16,6 +16,7 @@ if (Platform.OS !== 'web') {
 type SpeechResultCallback = (text: string) => void;
 type SpeechEndCallback = () => void;
 
+const GEMINI_API_KEY = 'AIzaSyATFG-N_HT4IFm8SHGLnlAFtH_7fzqB_j0';
 const genAI = isGeminiAvailable() ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
 
 class VoiceService {
@@ -42,7 +43,7 @@ class VoiceService {
       this.initializeVoice();
     }
     if (isGeminiAvailable()) {
-      this.genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+      this.genAI = new GoogleGenerativeAI('AIzaSyATFG-N_HT4IFm8SHGLnlAFtH_7fzqB_j0');
     }
   }
 
@@ -216,19 +217,25 @@ class VoiceService {
     if (!this.isTTSAvailable) return;
 
     try {
+      // Strip markdown and special characters before speaking
+      let cleanText = text
+        .replace(/[*_#`~\[\](){}]/g, '') // Remove markdown symbols
+        .replace(/[!?]/g, '.') // Replace punctuation with periods to avoid pausing
+        .trim();
+      
       // Detect language from text
-      const isHindi = /[\u0900-\u097F]/.test(text);
-      const isMarathi = /[\u0900-\u097F]/.test(text); // Marathi uses Devanagari script
-      const isTamil = /[\u0B80-\u0BFF]/.test(text);
-      const isTelugu = /[\u0C00-\u0C7F]/.test(text);
-      const isKannada = /[\u0C80-\u0CFF]/.test(text);
-      const isMalayalam = /[\u0D00-\u0D7F]/.test(text);
-      const isBengali = /[\u0980-\u09FF]/.test(text);
-      const isPunjabi = /[\u0A00-\u0A7F]/.test(text);
-      const isOdia = /[\u0B00-\u0B7F]/.test(text);
+      const isHindi = /[\u0900-\u097F]/.test(cleanText);
+      const isMarathi = /[\u0900-\u097F]/.test(cleanText); // Marathi uses Devanagari script
+      const isTamil = /[\u0B80-\u0BFF]/.test(cleanText);
+      const isTelugu = /[\u0C00-\u0C7F]/.test(cleanText);
+      const isKannada = /[\u0C80-\u0CFF]/.test(cleanText);
+      const isMalayalam = /[\u0D00-\u0D7F]/.test(cleanText);
+      const isBengali = /[\u0980-\u09FF]/.test(cleanText);
+      const isPunjabi = /[\u0A00-\u0A7F]/.test(cleanText);
+      const isOdia = /[\u0B00-\u0B7F]/.test(cleanText);
 
       console.log('Language detection:', {
-        text: text.substring(0, 50) + '...',
+        text: cleanText.substring(0, 50) + '...',
         isHindi,
         isKannada,
         isTamil,
@@ -292,7 +299,7 @@ class VoiceService {
         // Cancel any ongoing speech
         window.speechSynthesis.cancel();
         
-        const utterance = new SpeechSynthesisUtterance(text);
+        const utterance = new SpeechSynthesisUtterance(cleanText);
         utterance.lang = language;
         utterance.rate = rate;
         utterance.pitch = pitch;
@@ -318,7 +325,7 @@ class VoiceService {
         // Priority 2: Fallback to expo-speech for mobile platforms
         console.log('Using expo-speech for language:', language);
         
-        await Speech.speak(text, {
+        await Speech.speak(cleanText, {
           language: language,
           pitch: pitch,
           rate: rate,
@@ -345,27 +352,37 @@ class VoiceService {
       }
 
       const model = getGeminiModel(this.genAI);
-      const prompt = `You are a friendly and knowledgeable agricultural assistant for Smart Bharat, designed to help Indian farmers. Your responses should be:
+      const prompt = `You are a specialized agricultural assistant for Smart Bharat, helping Indian farmers with farming and agriculture topics ONLY.
 
-1. Natural and conversational - avoid robotic or formal language
-2. Focused on agriculture, farming, and rural development
-3. Helpful and practical - provide actionable advice when possible
-4. Culturally aware - use appropriate greetings and terms
-5. Multilingual - respond in the same language as the user's query
+IMPORTANT: You MUST ONLY answer questions about:
+- Agriculture, farming, crops, plants, cultivation
+- Livestock, dairy farming, animal husbandry, poultry
+- Fisheries, aquaculture, fish farming
+- Irrigation, soil management, fertilizers, pesticides
+- Weather and farming, agricultural seasons
+- Government schemes, subsidies for farmers
+- Mandi prices, agricultural economics
+- Horticulture, organic farming, composting
+- Related rural development topics
 
-For non-agricultural topics:
-- Acknowledge the topic briefly
-- Politely redirect to farming-related subjects
-- Suggest relevant agricultural topics they might be interested in
+For ANY non-agricultural topic (sports, politics, entertainment, general knowledge, etc.):
+- Politely decline and say you can only help with farming and agriculture questions
+- Do NOT provide information on non-farming topics
+- Suggest they ask an agriculture-related question instead
+
+Your responses should be:
+1. Natural and conversational
+2. Helpful and practical - provide actionable advice
+3. Culturally aware - use appropriate terms for Indian farmers
+4. Multilingual - respond in the same language as the user's query
 
 User's message: "${userInput}"
 
 Remember:
-- Keep responses concise but informative
+- Keep responses concise
 - Use simple, clear language
-- Include both English and Hindi terms when appropriate
 - Maintain a warm, helpful tone
-- If the user uses a greeting, respond naturally and guide them to agricultural topics`;
+- ONLY answer agriculture-related questions`;
 
       const result = await model.generateContent(prompt);
       return result.response.text();
