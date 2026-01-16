@@ -22,7 +22,8 @@ import equipmentService, { Equipment } from '../../services/equipmentService';
 import AddEquipmentModal from '../../components/AddEquipmentModal';
 import BookingModal from '../../components/BookingModal';
 import bookingService from '../../services/bookingService';
-import { getAuth } from '../../config/firebase';
+import { getAuth, getDb } from '../../config/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
 export default function RentScreen() {
   const [equipment, setEquipment] = useState<Equipment[]>([]);
@@ -44,13 +45,114 @@ export default function RentScreen() {
 
   useEffect(() => {
     fetchEquipment();
-    if (currentUser) {
-      fetchUserBookings();
-      fetchMyEquipment();
-      fetchBookingRequests();
-      fetchAcceptedBookings();
+    if (!currentUser) return;
+    
+    // Set up real-time listeners
+    const db = getDb();
+    const unsubscribers: (() => void)[] = [];
+
+    // Listener for booking requests (pending bookings for this owner)
+    try {
+      const bookingRequestsQuery = query(
+        collection(db, 'bookings'),
+        where('ownerId', '==', currentUser.uid),
+        where('status', '==', 'pending')
+      );
+      const unsubBookingRequests = onSnapshot(bookingRequestsQuery, (snapshot) => {
+        const requests: any[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          requests.push({
+            id: doc.id,
+            ...data,
+            startDate: data.startDate?.toDate?.() || data.startDate,
+            endDate: data.endDate?.toDate?.() || data.endDate,
+            createdAt: data.createdAt?.toDate?.() || data.createdAt,
+            updatedAt: data.updatedAt?.toDate?.() || data.updatedAt,
+          });
+        });
+        setBookingRequests(requests);
+      });
+      unsubscribers.push(unsubBookingRequests);
+    } catch (error) {
+      console.error('Error setting up booking requests listener:', error);
     }
+
+    // Listener for accepted bookings (active rentals for this owner)
+    try {
+      const acceptedBookingsQuery = query(
+        collection(db, 'bookings'),
+        where('ownerId', '==', currentUser.uid),
+        where('status', '==', 'accepted')
+      );
+      const unsubAcceptedBookings = onSnapshot(acceptedBookingsQuery, (snapshot) => {
+        const bookings: any[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          bookings.push({
+            id: doc.id,
+            ...data,
+            startDate: data.startDate?.toDate?.() || data.startDate,
+            endDate: data.endDate?.toDate?.() || data.endDate,
+            createdAt: data.createdAt?.toDate?.() || data.createdAt,
+            updatedAt: data.updatedAt?.toDate?.() || data.updatedAt,
+          });
+        });
+        setAcceptedBookings(bookings);
+      });
+      unsubscribers.push(unsubAcceptedBookings);
+    } catch (error) {
+      console.error('Error setting up accepted bookings listener:', error);
+    }
+
+    // Listener for user bookings (pending bookings made by current user)
+    try {
+      const userBookingsQuery = query(
+        collection(db, 'bookings'),
+        where('renterId', '==', currentUser.uid),
+        where('status', '==', 'pending')
+      );
+      const unsubUserBookings = onSnapshot(userBookingsQuery, (snapshot) => {
+        const equipmentIds: string[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          equipmentIds.push(data.equipmentId);
+        });
+        setUserBookings(equipmentIds);
+      });
+      unsubscribers.push(unsubUserBookings);
+    } catch (error) {
+      console.error('Error setting up user bookings listener:', error);
+    }
+
+    // Cleanup listeners on unmount
+    return () => {
+      unsubscribers.forEach(unsub => unsub?.());
+    };
   }, [currentUser]);
+
+  // Listener for equipment changes (to update status badges in real-time)
+  useEffect(() => {
+    const db = getDb();
+    try {
+      const equipmentQuery = query(collection(db, 'equipment'));
+      const unsubEquipment = onSnapshot(equipmentQuery, (snapshot) => {
+        const allEquipment: Equipment[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          allEquipment.push({
+            id: doc.id,
+            ...data,
+            createdAt: data.createdAt?.toDate?.() || data.createdAt,
+          } as Equipment);
+        });
+        setEquipment(allEquipment);
+      });
+      return () => unsubEquipment();
+    } catch (error) {
+      console.error('Error setting up equipment listener:', error);
+    }
+  }, []);
 
   const fetchMyEquipment = async () => {
     try {
