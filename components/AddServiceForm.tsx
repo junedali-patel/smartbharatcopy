@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, TextInput, Button, StyleSheet, ScrollView, Alert, Image, TouchableOpacity, Text, ActivityIndicator } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
-import { db, auth } from '../services/firebaseConfig';
+import { getDb, getAuth } from '../config/firebase';
 import { collection, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
 import { MaterialIcons } from '@expo/vector-icons';
 import FirestoreImageService from '../services/firestoreImageService';
@@ -103,16 +103,16 @@ const AddServiceForm = ({ onClose, onSuccess, initialData = null, isEdit = false
       const serviceData = {
         ...service,
         images: imageIds,
-        userId: auth.currentUser?.uid,
+        userId: getAuth()?.currentUser?.uid,
         dailyRate: parseFloat(service.dailyRate),
         updatedAt: serverTimestamp(),
       };
 
       if (isEdit && initialData?.id) {
-        await updateDoc(doc(db, 'services', initialData.id), serviceData);
+        await updateDoc(doc(getDb(), 'services', initialData.id), serviceData);
         Alert.alert('Success', 'Listing updated successfully!');
       } else {
-        await addDoc(collection(db, 'services'), {
+        await addDoc(collection(getDb(), 'services'), {
           ...serviceData,
           createdAt: serverTimestamp(),
           rating: 0,

@@ -119,9 +119,26 @@ const predictDiseaseFromHF = async (image: any): Promise<{ disease: string; conf
   }
 };
 
-// Gemini AI info fetch
+// Cache for Gemini responses to prevent duplicate API calls
+const geminiCache = new Map<string, any>();
+let lastGeminiRequestTime = 0;
+const GEMINI_REQUEST_DELAY = 2000; // 2 second delay between requests to respect rate limits
+
+// Gemini AI info fetch with caching and rate limiting
 const getGeminiDiseaseInfo = async (diseaseLabel: string) => {
-  const apiKey = 'AIzaSyBvA4nIaxyA6xVHPmVFr_bNaUBs_Feg_dg';
+  // Check cache first
+  if (geminiCache.has(diseaseLabel)) {
+    console.log('Using cached Gemini response for:', diseaseLabel);
+    return geminiCache.get(diseaseLabel);
+  }
+
+  // Implement rate limiting - wait before making request
+  const timeSinceLastRequest = Date.now() - lastGeminiRequestTime;
+  if (timeSinceLastRequest < GEMINI_REQUEST_DELAY) {
+    await new Promise(resolve => setTimeout(resolve, GEMINI_REQUEST_DELAY - timeSinceLastRequest));
+  }
+
+  const apiKey = 'AIzaSyDGzlWAvbh75mP5wS0M8OIM4bZQoWt2h8s';
   const prompt = `Write a detailed, structured response about the plant disease "${diseaseLabel}" in this format:
 
 ABOUT:
@@ -161,6 +178,9 @@ SOLUTION:
     );
   }
 
+  // Record request time for rate limiting
+  lastGeminiRequestTime = Date.now();
+
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error('Gemini API error: ' + errorText);
@@ -191,11 +211,16 @@ SOLUTION:
     return linkUrl && linkUrl.trim().startsWith('http') ? match : linkText;
   });
 
-  return {
+  const result = {
     about: aboutMatch ? aboutMatch[1].trim() : 'Information not available.',
     cause: causeMatch ? causeMatch[1].trim() : 'Information not available.',
     solution,
   };
+
+  // Cache the result for future requests
+  geminiCache.set(diseaseLabel, result);
+
+  return result;
 };
 
 // Component to render clickable links

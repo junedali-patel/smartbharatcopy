@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Farmer Profile Information</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#22c55e", // Farmer green
+                        secondary: "#15803d",
+                        "background-light": "#f8fafc",
+                        "background-dark": "#0f172a",
+                    },
+                    fontFamily: {
+                        display: ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "12px",
+                    },
+                },
+            },
+        };
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .ios-status-bar {
+            height: 44px;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+<header class="sticky top-0 z-10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 pt-12 pb-4">
+<div class="flex items-center justify-between max-w-md mx-auto">
+<div class="flex items-center gap-2">
+<h1 class="text-xl font-bold tracking-tight">My Profile</h1>
+<span class="material-icons-round text-slate-500 dark:text-slate-400 text-xl cursor-pointer">settings</span>
+</div>
+<button class="bg-primary hover:bg-secondary text-white px-4 py-1.5 rounded-full flex items-center gap-1.5 text-sm font-semibold transition-colors">
+<span class="material-icons-round text-base">edit</span>
+                Edit
+            </button>
+</div>
+</header>
+<main class="flex-1 max-w-md mx-auto w-full px-4 py-6 pb-24 space-y-6">
+<section class="flex items-center gap-4 px-2 mb-8">
+<div class="relative">
+<div class="w-20 h-20 rounded-full border-4 border-white dark:border-slate-800 shadow-sm overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+<div class="w-full h-full bg-primary/10 flex items-center justify-center">
+<span class="material-icons-round text-primary text-5xl">account_circle</span>
+</div>
+</div>
+<div class="absolute bottom-0 right-0 bg-primary text-white p-1 rounded-full border-2 border-white dark:border-slate-900">
+<span class="material-icons-round text-xs">add_a_photo</span>
+</div>
+</div>
+<div>
+<h2 class="text-2xl font-bold">Your Name</h2>
+<p class="text-slate-500 dark:text-slate-400 text-sm">Lead Farmer • Member since 2023</p>
+</div>
+</section>
+<section class="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700 space-y-5">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-icons-round text-primary">person</span>
+<h3 class="font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider text-xs">Personal Information</h3>
+</div>
+<div class="space-y-4">
+<div>
+<label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 ml-1">Full Name</label>
+<input class="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-2xl p-3.5 focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600" placeholder="Enter your full name" type="text"/>
+</div>
+<div>
+<label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 ml-1">Email</label>
+<input class="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-2xl p-3.5 focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600" placeholder="Your email address" type="email"/>
+</div>
+<div>
+<label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 ml-1">Phone Number</label>
+<input class="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-2xl p-3.5 focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600" placeholder="Enter your phone number" type="tel"/>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div>
+<label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 ml-1">Farm Size (Acres)</label>
+<input class="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-2xl p-3.5 focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600" placeholder="e.g. 50" type="number"/>
+</div>
+<div>
+<label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 ml-1">Primary Crop</label>
+<input class="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-2xl p-3.5 focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600" placeholder="e.g. Maize" type="text"/>
+</div>
+</div>
+</div>
+</section>
+<section class="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700 space-y-5">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-icons-round text-primary">location_on</span>
+<h3 class="font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider text-xs">Farm Location</h3>
+</div>
+<div class="space-y-4">
+<div>
+<label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 ml-1">Address</label>
+<textarea class="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-2xl p-3.5 focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600" placeholder="Enter your address" rows="2"></textarea>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div>
+<label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 ml-1">City</label>
+<input class="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-2xl p-3.5 focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600" placeholder="City" type="text"/>
+</div>
+<div>
+<label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 ml-1">State</label>
+<input class="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-2xl p-3.5 focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600" placeholder="State" type="text"/>
+</div>
+</div>
+</div>
+</section>
+<button class="w-full bg-primary hover:bg-secondary text-white font-bold py-4 rounded-2xl shadow-lg shadow-primary/20 transition-all active:scale-[0.98]">
+            Save Changes
+        </button>
+</main>
+<nav class="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 pb-8 pt-3 px-6">
+<div class="max-w-md mx-auto flex justify-between items-center">
+<a class="flex flex-col items-center gap-1 group" href="#">
+<span class="material-icons-round text-slate-400 group-hover:text-primary transition-colors">home</span>
+<span class="text-[10px] font-medium text-slate-500 group-hover:text-primary">Home</span>
+</a>
+<a class="flex flex-col items-center gap-1 group" href="#">
+<span class="material-icons-round text-slate-400 group-hover:text-primary transition-colors">assignment</span>
+<span class="text-[10px] font-medium text-slate-500 group-hover:text-primary">Tasks</span>
+</a>
+<a class="flex flex-col items-center gap-1 group" href="#">
+<span class="material-icons-round text-slate-400 group-hover:text-primary transition-colors">explore</span>
+<span class="text-[10px] font-medium text-slate-500 group-hover:text-primary">Explore</span>
+</a>
+<a class="flex flex-col items-center gap-1 group" href="#">
+<span class="material-icons-round text-slate-400 group-hover:text-primary transition-colors">article</span>
+<span class="text-[10px] font-medium text-slate-500 group-hover:text-primary">News</span>
+</a>
+<a class="flex flex-col items-center gap-1" href="#">
+<div class="relative flex flex-col items-center gap-1">
+<span class="material-icons-round text-primary">person</span>
+<span class="text-[10px] font-bold text-primary">Profile</span>
+<div class="absolute -bottom-1.5 w-1 h-1 bg-primary rounded-full"></div>
+</div>
+</a>
+<a class="flex flex-col items-center gap-1 group" href="#">
+<span class="material-icons-round text-slate-400 group-hover:text-primary transition-colors">shopping_basket</span>
+<span class="text-[10px] font-medium text-slate-500 group-hover:text-primary">Market</span>
+</a>
+</div>
+</nav>
+
+</body></html>

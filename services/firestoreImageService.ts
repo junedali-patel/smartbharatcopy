@@ -1,4 +1,4 @@
-import { db, auth } from './firebaseConfig';
+import { db, auth, getDbInstance, getAuthInstance } from './firebaseConfig';
 import { collection, addDoc, deleteDoc, doc, query, where, getDocs, updateDoc } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -33,6 +33,24 @@ class FirestoreImageService {
     return FirestoreImageService.instance;
   }
 
+  // Helper to get database instance with error handling
+  private getDb() {
+    const dbInstance = getDbInstance();
+    if (!dbInstance) {
+      throw new Error('Firebase Database not initialized');
+    }
+    return dbInstance;
+  }
+
+  // Helper to get auth instance
+  private getAuth() {
+    const authInstance = getAuthInstance();
+    if (!authInstance) {
+      throw new Error('Firebase Auth not initialized');
+    }
+    return authInstance;
+  }
+
   /**
    * Store an image as base64 in Firestore with compression
    * @param base64 - Base64 encoded image string (raw or with data URI prefix)
@@ -46,7 +64,8 @@ class FirestoreImageService {
     context: string = 'general'
   ): Promise<string> {
     try {
-      if (!auth.currentUser) {
+      const authInstance = this.getAuth();
+      if (!authInstance.currentUser) {
         throw new Error('User not authenticated');
       }
 
@@ -65,11 +84,11 @@ class FirestoreImageService {
       }
 
       const imageId = uuidv4();
-      const imageRef = collection(db, this.collectionName);
+      const imageRef = collection(this.getDb(), this.collectionName);
 
       const imageData: StoredImage = {
         id: imageId,
-        userId: auth.currentUser.uid,
+        userId: authInstance.currentUser.uid,
         base64: cleanBase64,
         mimeType,
         filename: `${imageId}.${this.getExtensionFromMimeType(mimeType)}`,
@@ -104,12 +123,12 @@ class FirestoreImageService {
         const dataUri = `data:image/jpeg;base64,${compressedBase64}`;
         const result = await ImageManipulator.manipulateAsync(dataUri, [
           { resize: { width: this.MAX_DIMENSION, height: this.MAX_DIMENSION } }
-        ], { compress: currentQuality, format: 'jpeg' });
+        ], { compress: currentQuality } as any);
 
         // Use Expo FileSystem to read the file as base64
         try {
           compressedBase64 = await FileSystem.readAsStringAsync(result.uri, {
-            encoding: FileSystem.EncodingType.Base64,
+            encoding: 'base64' as any,
           });
         } catch (fsError) {
           // Fallback: if FileSystem doesn't work, try fetch+blob
@@ -145,7 +164,7 @@ class FirestoreImageService {
    */
   async getImage(imageId: string): Promise<string | null> {
     try {
-      const imageRef = collection(db, this.collectionName);
+      const imageRef = collection(this.getDb(), this.collectionName);
       const q = query(imageRef, where('id', '==', imageId));
       const querySnapshot = await getDocs(q);
 
@@ -167,13 +186,13 @@ class FirestoreImageService {
    */
   async deleteImage(imageId: string): Promise<void> {
     try {
-      const imageRef = collection(db, this.collectionName);
+      const imageRef = collection(this.getDb(), this.collectionName);
       const q = query(imageRef, where('id', '==', imageId));
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
         const docId = querySnapshot.docs[0].id;
-        await deleteDoc(doc(db, this.collectionName, docId));
+        await deleteDoc(doc(this.getDb(), this.collectionName, docId));
         console.log('Image deleted successfully:', imageId);
       }
     } catch (error) {
@@ -187,12 +206,13 @@ class FirestoreImageService {
    */
   async getUserImages(): Promise<StoredImage[]> {
     try {
-      if (!auth.currentUser) {
+      const authInstance = this.getAuth();
+      if (!authInstance.currentUser) {
         return [];
       }
 
-      const imageRef = collection(db, this.collectionName);
-      const q = query(imageRef, where('userId', '==', auth.currentUser.uid));
+      const imageRef = collection(this.getDb(), this.collectionName);
+      const q = query(imageRef, where('userId', '==', authInstance.currentUser.uid));
       const querySnapshot = await getDocs(q);
 
       return querySnapshot.docs.map((doc) => ({
@@ -210,14 +230,15 @@ class FirestoreImageService {
    */
   async getImagesByContext(context: string): Promise<StoredImage[]> {
     try {
-      if (!auth.currentUser) {
+      const authInstance = this.getAuth();
+      if (!authInstance.currentUser) {
         return [];
       }
 
-      const imageRef = collection(db, this.collectionName);
+      const imageRef = collection(this.getDb(), this.collectionName);
       const q = query(
         imageRef,
-        where('userId', '==', auth.currentUser.uid),
+        where('userId', '==', authInstance.currentUser.uid),
         where('metadata.context', '==', context)
       );
       const querySnapshot = await getDocs(q);

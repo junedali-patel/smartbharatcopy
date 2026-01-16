@@ -1,4 +1,4 @@
-import { FontAwesome } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useState } from 'react';
@@ -6,22 +6,21 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  Dimensions,
-  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useThemeColor } from '../../hooks/useThemeColor';
-import { auth, db } from '../../services/firebase';
-import { doc, setDoc, updateDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { getDb, getAuth } from '../../config/firebase';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { signOut } from 'firebase/auth';
 import { FieldValue } from 'firebase/firestore';
 import FirestoreImageService from '../../services/firestoreImageService';
+import { Colors, Spacing, BorderRadius } from '../../constants/newDesignSystem';
+import { StyledCard, Heading2, BodyText } from '../../components/StyledComponents';
 
 type UserProfile = {
   name: string;
@@ -36,43 +35,17 @@ type UserProfile = {
   avatarUrl: string;
   createdAt: string | FieldValue;
   updatedAt: string | FieldValue;
-}
+};
 
 const INTEREST_OPTIONS = [
-  'Farming',
-  'Technology',
-  'Education',
-  'Healthcare',
-  'Environment',
-  'Business',
-  'Art & Culture',
-  'Sports',
-  'Travel',
-  'Food & Cooking'
+  'Farming', 'Technology', 'Education', 'Healthcare', 'Environment',
+  'Business', 'Art & Culture', 'Sports', 'Travel', 'Food & Cooking'
 ];
 
-const { width } = Dimensions.get('window');
-
 export default function ProfileScreen() {
-  const backgroundColor = '#f8f9fa';
-  const cardBackground = '#ffffff';
-  const textColor = useThemeColor({ light: '#2c3e50', dark: '#2c3e50' }, 'text');
-  const accentColor = useThemeColor({ light: '#27ae60', dark: '#27ae60' }, 'tint');
-  const borderColor = '#e9ecef';
-
   const [profile, setProfile] = useState<UserProfile>({
-    name: '',
-    email: '',
-    phone: '',
-    address: '',
-    city: '',
-    state: '',
-    pincode: '',
-    occupation: '',
-    interests: [],
-    avatarUrl: '',
-    createdAt: '',
-    updatedAt: ''
+    name: '', email: '', phone: '', address: '', city: '', state: '',
+    pincode: '', occupation: '', interests: [], avatarUrl: '', createdAt: '', updatedAt: ''
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -83,146 +56,71 @@ export default function ProfileScreen() {
   const [avatarDataUri, setAvatarDataUri] = useState<string | null>(null);
 
   useEffect(() => {
-    console.log('ProfileScreen: Component mounted');
     setIsMounted(true);
-    // Delay fetching profile to ensure component is fully mounted
-    const timer = setTimeout(() => {
-      fetchUserProfile();
-    }, 100);
-    
+    const timer = setTimeout(() => fetchUserProfile(), 100);
     return () => {
       clearTimeout(timer);
       setIsMounted(false);
     };
   }, []);
 
-  // Cleanup effect to prevent navigation after unmount
-  useEffect(() => {
-    return () => {
-      setIsMounted(false);
-    };
-  }, []);
-
-  const safeNavigate = (route: '/auth/login') => {
-    try {
-      if (isMounted) {
-        router.replace(route);
-      }
-    } catch (error) {
-      console.error('Navigation error:', error);
-      // Fallback: try to navigate after a short delay
-      setTimeout(() => {
-        try {
-          router.replace(route);
-        } catch (fallbackError) {
-          console.error('Fallback navigation failed:', fallbackError);
-        }
-      }, 100);
-    }
-  };
-
   const fetchUserProfile = async () => {
     try {
-      console.log('ProfileScreen: Fetching user profile...');
-      if (!auth.currentUser) {
-        console.log('ProfileScreen: No current user, redirecting to login');
-        // Only navigate if component is mounted
-        if (isMounted) {
-          safeNavigate('/auth/login');
-        }
+      const auth = getAuth();
+      if (!auth || !auth.currentUser) {
+        if (isMounted) router.replace('/auth/login');
         return;
       }
-
-      console.log('ProfileScreen: Current user found:', auth.currentUser.uid);
+      
+      const db = getDb();
       const userRef = doc(db, 'users', auth.currentUser.uid);
       const docSnap = await getDoc(userRef);
 
       if (docSnap.exists()) {
-        console.log('ProfileScreen: User profile found in Firestore');
         const data = docSnap.data() as UserProfile;
-        setProfile({
-          ...data,
-          interests: Array.isArray(data.interests) ? data.interests : []
-        });
+        setProfile({ ...data, interests: Array.isArray(data.interests) ? data.interests : [] });
         
-        // If avatarUrl is an image ID (not a URL), fetch the image from Firestore
         if (data.avatarUrl && !data.avatarUrl.includes('://')) {
-          console.log('ProfileScreen: Fetching avatar image from Firestore');
           const imageService = FirestoreImageService.getInstance();
           const imageUri = await imageService.getImage(data.avatarUrl);
-          if (imageUri) {
-            setAvatarDataUri(imageUri);
-          }
+          if (imageUri) setAvatarDataUri(imageUri);
         }
       } else {
-        console.log('ProfileScreen: No user profile found, creating default profile');
-        // Create a default profile if none exists
         const defaultProfile: UserProfile = {
           name: auth.currentUser.displayName || '',
           email: auth.currentUser.email || '',
-          phone: '',
-          address: '',
-          city: '',
-          state: '',
-          pincode: '',
-          occupation: '',
-          interests: [],
-          avatarUrl: '',
+          phone: '', address: '', city: '', state: '', pincode: '',
+          occupation: '', interests: [], avatarUrl: '',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         };
         setProfile(defaultProfile);
       }
     } catch (error) {
-      console.error('ProfileScreen: Error fetching profile:', error);
+      console.error('Error fetching profile:', error);
       setError('Failed to load profile data');
-      Alert.alert('Error', 'Failed to load profile data');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSignOut = async () => {
-    console.log('ProfileScreen: Sign out button pressed');
-    
-    try {
-      console.log('ProfileScreen: Starting Firebase sign out...');
-      await auth.signOut();
-      console.log('ProfileScreen: Firebase sign out successful');
-      
-      // Navigate to login page
-      console.log('ProfileScreen: Navigating to login...');
-      router.replace('/auth/login');
-      console.log('ProfileScreen: Navigation successful');
-    } catch (error) {
-      console.error('ProfileScreen: Error signing out:', error);
-      Alert.alert('Error', 'Failed to sign out. Please try again.');
-    }
-  };
-
   const pickImage = async () => {
     try {
-      // Request permissions
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Please grant permission to access your photos in Settings.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Settings', onPress: () => Linking.openSettings() }
-          ]
-        );
+        Alert.alert('Permission Required', 'Please grant permission to access your photos in Settings.');
         return;
       }
+      
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.6,  // Aggressive compression (40% quality)
+        quality: 0.6,
         base64: true,
       });
-      if (!result.canceled && result.assets && result.assets.length > 0 && result.assets[0].base64) {
+      
+      if (!result.canceled && result.assets?.[0].base64) {
         await uploadImageFromBase64(result.assets[0].base64);
       }
     } catch (error) {
@@ -231,88 +129,50 @@ export default function ProfileScreen() {
   };
 
   const uploadImageFromBase64 = async (base64Data: string) => {
-    if (!auth.currentUser) {
-      Alert.alert('Error', 'User not authenticated');
-      return;
-    }
+    setUploadingImage(true);
     try {
-      setUploadingImage(true);
       const imageService = FirestoreImageService.getInstance();
-      const imageId = await imageService.uploadImage(base64Data, 'image/jpeg', 'profile');
-      
-      // Store the image ID in the profile
-      await updateProfile({ avatarUrl: imageId });
-      Alert.alert('Success', 'Profile picture updated successfully!');
+      const imageId = await imageService.uploadImage(base64Data);
+      setProfile(prev => ({ ...prev, avatarUrl: imageId }));
+      setAvatarDataUri(`data:image/jpeg;base64,${base64Data}`);
     } catch (error) {
-      console.error('Image upload error:', error);
-      Alert.alert('Upload Error', 'Failed to upload image. Please try again.');
+      Alert.alert('Error', 'Failed to upload image. Please try again.');
     } finally {
       setUploadingImage(false);
     }
   };
 
-  const updateProfile = async (updates: Partial<UserProfile>) => {
-    if (!auth.currentUser) {
-      Alert.alert('Error', 'You must be logged in to update your profile');
-      return;
-    }
-  
+  const updateProfile = async () => {
+    setSaving(true);
     try {
-      setSaving(true);
-      setError(null);
-      
-      // Validate required fields if needed
-      if (updates.name && updates.name.trim().length < 2) {
-        throw new Error('Name must be at least 2 characters long');
-      }
-  
+      const auth = getAuth();
+      if (!auth?.currentUser) return;
+
+      const db = getDb();
       const userRef = doc(db, 'users', auth.currentUser.uid);
       
-      // Only update if there are actual changes
-      const hasChanges = Object.keys(updates).length > 0;
-      
-      if (hasChanges) {
-        console.log('Updating profile with changes:', updates);
-        
-        // Prepare update data with timestamps
-        const updateData: Partial<UserProfile> = {
-          ...updates,
-          updatedAt: serverTimestamp(),
-        };
-        
-        // If this is a new user, set the createdAt timestamp
-        if (!profile?.createdAt) {
-          updateData.createdAt = serverTimestamp();
-        }
-        
-        // Use setDoc with merge: true to create or update the document
-        await setDoc(userRef, updateData, { merge: true });
-        
-        // Update local state with the new data
-        setProfile(prev => ({
-          ...prev,
-          ...updates,
-          updatedAt: new Date().toISOString(),
-          // Only update createdAt if it's a new profile
-          ...(!prev?.createdAt && { createdAt: new Date().toISOString() })
-        }));
-        
-        // Show success message if not in development mode
-        if (!__DEV__) {
-          Alert.alert('Success', 'Profile updated successfully!');
-        }
-      } else {
-        console.log('No changes to save');
-      }
+      await setDoc(userRef, {
+        ...profile,
+        updatedAt: serverTimestamp(),
+        createdAt: profile.createdAt || serverTimestamp(),
+      }, { merge: true });
 
+      Alert.alert('Success', 'Profile updated successfully!');
       setEditing(false);
     } catch (error: any) {
-      console.error('Error updating profile:', error);
-      const errorMessage = error.message || 'Failed to update profile. Please try again.';
-      setError(errorMessage);
-      Alert.alert('Error', errorMessage);
+      Alert.alert('Error', error.message || 'Failed to update profile.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      const auth = getAuth();
+      if (auth) await signOut(auth);
+      router.replace('/auth/login');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to sign out.');
     }
   };
 
@@ -327,10 +187,10 @@ export default function ProfileScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor }]}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={accentColor} />
-          <Text style={[styles.loadingText, { color: textColor }]}>Loading profile...</Text>
+      <SafeAreaView style={[styles.container, { backgroundColor: Colors.background.light }]}>
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <BodyText style={{ marginTop: 16, color: Colors.text.primary }}>Loading profile...</BodyText>
         </View>
       </SafeAreaView>
     );
@@ -338,15 +198,12 @@ export default function ProfileScreen() {
 
   if (error) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor }]}>
-        <View style={styles.errorContainer}>
-          <FontAwesome name="exclamation-triangle" size={48} color="#e74c3c" />
-          <Text style={[styles.errorText, { color: textColor }]}>{error}</Text>
-          <TouchableOpacity
-            style={[styles.retryButton, { backgroundColor: accentColor }]}
-            onPress={fetchUserProfile}
-          >
-            <Text style={styles.retryButtonText}>Retry</Text>
+      <SafeAreaView style={[styles.container, { backgroundColor: Colors.background.light }]}>
+        <View style={styles.centerContainer}>
+          <MaterialIcons name="error-outline" size={48} color={Colors.error} />
+          <BodyText style={{ marginTop: 16, color: Colors.text.primary }}>{error}</BodyText>
+          <TouchableOpacity style={[styles.retryBtn, { backgroundColor: Colors.primary }]} onPress={fetchUserProfile}>
+            <Text style={{ color: '#fff', fontWeight: 'bold' }}>Retry</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -354,37 +211,24 @@ export default function ProfileScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Enhanced Profile Header */}
-        <View style={[styles.header, { backgroundColor: cardBackground }]}>
-          <View style={styles.headerContent}>
-            <View style={{ flex: 1 }} />
-            <Text style={[styles.headerTitle, { color: textColor, textAlign: 'center' }]}>My Profile</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <TouchableOpacity
-                style={[styles.settingsButton, { marginRight: 10 }]}
-                onPress={() => router.push('/settings')}
-              >
-                <FontAwesome name="cog" size={24} color={textColor} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.editButton, { backgroundColor: editing ? '#e74c3c' : accentColor }]}
-                onPress={() => setEditing(!editing)}
-              >
-                <FontAwesome name={editing ? "times" : "edit"} size={16} color="#fff" />
-                <Text style={styles.editButtonText}>
-                  {editing ? 'Cancel' : 'Edit'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+    <SafeAreaView style={[styles.container, { backgroundColor: Colors.background.light }]}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* Header */}
+        <View style={styles.headerContainer}>
+          <Heading2 style={{ flex: 1, color: Colors.text.primary }}>My Profile</Heading2>
+          <TouchableOpacity
+            style={[styles.editBtn, { backgroundColor: editing ? Colors.error : Colors.primary }]}
+            onPress={() => setEditing(!editing)}
+          >
+            <MaterialIcons name={editing ? "close" : "edit"} size={16} color="#fff" />
+            <Text style={{ color: '#fff', fontWeight: 'bold', marginLeft: 4 }}>{editing ? 'Cancel' : 'Edit'}</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Enhanced Avatar Section */}
-        <View style={[styles.avatarSection, { backgroundColor: cardBackground }]}>
+        {/* Avatar Section */}
+        <StyledCard style={styles.avatarCard}>
           <TouchableOpacity
-            style={[styles.avatarContainer, { borderColor }]}
+            style={styles.avatarContainer}
             onPress={editing ? pickImage : undefined}
             disabled={!editing || uploadingImage}
           >
@@ -392,514 +236,171 @@ export default function ProfileScreen() {
               <Image source={{ uri: avatarDataUri }} style={styles.avatar} />
             ) : (
               <View style={styles.avatarPlaceholder}>
-                <FontAwesome name="user-circle" size={60} color={accentColor} />
-                <Text style={[styles.avatarPlaceholderText, { color: textColor }]}>
-                  {profile.name ? profile.name.charAt(0).toUpperCase() : 'U'}
-                </Text>
+                <MaterialIcons name="account-circle" size={60} color={Colors.primary} />
               </View>
             )}
             {editing && !uploadingImage && (
               <View style={styles.avatarOverlay}>
-                <FontAwesome name="camera" size={24} color="#fff" />
-                <Text style={styles.avatarOverlayText}>Tap to change</Text>
+                <MaterialIcons name="add-a-photo" size={24} color="#fff" />
+                <Text style={styles.avatarOverlayText}>Change</Text>
               </View>
             )}
             {uploadingImage && (
               <View style={styles.avatarOverlay}>
                 <ActivityIndicator size="large" color="#fff" />
-                <Text style={styles.avatarOverlayText}>Uploading...</Text>
               </View>
             )}
           </TouchableOpacity>
           
-          <View style={styles.profileInfo}>
-            <Text style={[styles.profileName, { color: textColor }]}>
-              {profile.name || 'Your Name'}
-            </Text>
-            <Text style={[styles.profileEmail, { color: '#7f8c8d' }]}>
-              {profile.email}
-            </Text>
-            {profile.occupation && (
-              <Text style={[styles.profileOccupation, { color: accentColor }]}>
-                {profile.occupation}
-              </Text>
-            )}
+          <View style={{ flex: 1, marginLeft: 16 }}>
+            <Heading2 style={{ color: Colors.text.primary }}>{profile.name || 'Your Name'}</Heading2>
+            <BodyText style={{ color: Colors.text.secondary, marginTop: 4 }}>
+              {profile.occupation ? `${profile.occupation} • ` : ''}Member since 2023
+            </BodyText>
+            <BodyText style={{ color: Colors.text.tertiary, marginTop: 4 }}>{profile.email}</BodyText>
           </View>
-        </View>
+        </StyledCard>
 
         {/* Personal Information Card */}
-        <View style={[styles.card, { backgroundColor: cardBackground }]}>
-          <View style={styles.cardHeader}>
-            <FontAwesome name="user" size={20} color={accentColor} />
-            <Text style={[styles.cardTitle, { color: textColor }]}>Personal Information</Text>
+        <StyledCard style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <MaterialIcons name="person" size={20} color={Colors.primary} />
+            <Heading2 style={{ marginLeft: 8, color: Colors.text.primary }}>Personal Info</Heading2>
           </View>
           
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: textColor }]}>Full Name</Text>
-            <TextInput
-              style={[styles.input, { color: textColor, borderColor }]}
-              value={profile.name}
-              onChangeText={(text) => setProfile(prev => ({ ...prev, name: text }))}
-              editable={editing}
-              placeholder="Enter your full name"
-              placeholderTextColor="#bdc3c7"
-            />
+          <InputField label="Full Name" value={profile.name} editable={editing} 
+            onChangeText={(text) => setProfile(prev => ({ ...prev, name: text }))} />
+          <InputField label="Email" value={profile.email} editable={false} onChangeText={() => {}} />
+          <InputField label="Phone" value={profile.phone} editable={editing} 
+            onChangeText={(text) => setProfile(prev => ({ ...prev, phone: text }))} />
+          <InputField label="Occupation" value={profile.occupation} editable={editing} 
+            onChangeText={(text) => setProfile(prev => ({ ...prev, occupation: text }))} />
+          
+          <View style={styles.twoColumns}>
+            <InputField label="Farm Size (Acres)" value={profile.state} editable={editing}
+              onChangeText={(text) => setProfile(prev => ({ ...prev, state: text }))} containerStyle={{ flex: 1 }} />
+            <InputField label="Primary Crop" value={profile.pincode} editable={editing}
+              onChangeText={(text) => setProfile(prev => ({ ...prev, pincode: text }))} containerStyle={{ flex: 1, marginLeft: 8 }} />
           </View>
+        </StyledCard>
 
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: textColor }]}>Email</Text>
-            <TextInput
-              style={[styles.input, { color: textColor, borderColor, backgroundColor: '#f8f9fa' }]}
-              value={profile.email}
-              editable={false}
-              placeholder="Your email address"
-              placeholderTextColor="#bdc3c7"
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: textColor }]}>Phone Number</Text>
-            <TextInput
-              style={[styles.input, { color: textColor, borderColor }]}
-              value={profile.phone}
-              onChangeText={(text) => setProfile(prev => ({ ...prev, phone: text }))}
-              editable={editing}
-              placeholder="Enter your phone number"
-              placeholderTextColor="#bdc3c7"
-              keyboardType="phone-pad"
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: textColor }]}>Occupation</Text>
-            <TextInput
-              style={[styles.input, { color: textColor, borderColor }]}
-              value={profile.occupation}
-              onChangeText={(text) => setProfile(prev => ({ ...prev, occupation: text }))}
-              editable={editing}
-              placeholder="Enter your occupation"
-              placeholderTextColor="#bdc3c7"
-            />
-          </View>
-        </View>
-
-        {/* Address Information Card */}
-        <View style={[styles.card, { backgroundColor: cardBackground }]}>
-          <View style={styles.cardHeader}>
-            <FontAwesome name="map-marker" size={20} color={accentColor} />
-            <Text style={[styles.cardTitle, { color: textColor }]}>Address Information</Text>
+        {/* Farm Location Card */}
+        <StyledCard style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <MaterialIcons name="location-on" size={20} color={Colors.primary} />
+            <Heading2 style={{ marginLeft: 8, color: Colors.text.primary }}>Farm Location</Heading2>
           </View>
           
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: textColor }]}>Address</Text>
-            <TextInput
-              style={[styles.input, { color: textColor, borderColor }]}
-              value={profile.address}
-              onChangeText={(text) => setProfile(prev => ({ ...prev, address: text }))}
-              editable={editing}
-              placeholder="Enter your address"
-              placeholderTextColor="#bdc3c7"
-              multiline
-              numberOfLines={3}
-            />
+          <InputField label="Address" value={profile.address} editable={editing} multiline
+            onChangeText={(text) => setProfile(prev => ({ ...prev, address: text }))} />
+          
+          <View style={styles.twoColumns}>
+            <InputField label="City" value={profile.city} editable={editing} containerStyle={{ flex: 1 }}
+              onChangeText={(text) => setProfile(prev => ({ ...prev, city: text }))} />
+            <InputField label="State" value={profile.state} editable={editing} containerStyle={{ flex: 1, marginLeft: 8 }}
+              onChangeText={(text) => setProfile(prev => ({ ...prev, state: text }))} />
           </View>
-
-          <View style={styles.row}>
-            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-              <Text style={[styles.label, { color: textColor }]}>City</Text>
-              <TextInput
-                style={[styles.input, { color: textColor, borderColor }]}
-                value={profile.city}
-                onChangeText={(text) => setProfile(prev => ({ ...prev, city: text }))}
-                editable={editing}
-                placeholder="City"
-                placeholderTextColor="#bdc3c7"
-              />
-            </View>
-
-            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-              <Text style={[styles.label, { color: textColor }]}>State</Text>
-              <TextInput
-                style={[styles.input, { color: textColor, borderColor }]}
-                value={profile.state}
-                onChangeText={(text) => setProfile(prev => ({ ...prev, state: text }))}
-                editable={editing}
-                placeholder="State"
-                placeholderTextColor="#bdc3c7"
-              />
-            </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: textColor }]}>Pincode</Text>
-            <TextInput
-              style={[styles.input, { color: textColor, borderColor }]}
-              value={profile.pincode}
-              onChangeText={(text) => setProfile(prev => ({ ...prev, pincode: text }))}
-              editable={editing}
-              placeholder="Enter your pincode"
-              placeholderTextColor="#bdc3c7"
-              keyboardType="number-pad"
-            />
-          </View>
-        </View>
+          
+          <InputField label="Pincode" value={profile.pincode} editable={editing}
+            onChangeText={(text) => setProfile(prev => ({ ...prev, pincode: text }))} />
+        </StyledCard>
 
         {/* Interests Card */}
-        <View style={[styles.card, { backgroundColor: cardBackground }]}>
-          <View style={styles.cardHeader}>
-            <FontAwesome name="heart" size={20} color={accentColor} />
-            <Text style={[styles.cardTitle, { color: textColor }]}>Interests</Text>
+        <StyledCard style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <MaterialIcons name="favorite" size={20} color={Colors.primary} />
+            <Heading2 style={{ marginLeft: 8, color: Colors.text.primary }}>Interests</Heading2>
           </View>
+          
           <View style={styles.interestsContainer}>
             {INTEREST_OPTIONS.map((interest) => (
               <TouchableOpacity
                 key={interest}
-                style={[
-                  styles.interestButton,
-                  {
-                    backgroundColor: profile.interests.includes(interest)
-                      ? accentColor
-                      : '#f8f9fa',
-                    borderColor: profile.interests.includes(interest) ? accentColor : borderColor
-                  }
-                ]}
-                onPress={() => editing && toggleInterest(interest)}
                 disabled={!editing}
+                style={[styles.interestBadge, {
+                  backgroundColor: profile.interests.includes(interest) ? Colors.primary : Colors.background.light,
+                  borderColor: profile.interests.includes(interest) ? Colors.primary : Colors.border,
+                }]}
+                onPress={() => toggleInterest(interest)}
               >
-                <Text
-                  style={[
-                    styles.interestText,
-                    {
-                      color: profile.interests.includes(interest)
-                        ? '#fff'
-                        : textColor
-                    }
-                  ]}
-                >
+                <Text style={{
+                  color: profile.interests.includes(interest) ? '#fff' : Colors.text.primary,
+                  fontSize: 13,
+                  fontWeight: '500',
+                }}>
                   {interest}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
-        </View>
+        </StyledCard>
 
-        {/* Settings Card */}
-        <View style={[styles.card, { backgroundColor: cardBackground }]}>
-          <View style={styles.cardHeader}>
-            <FontAwesome name="cog" size={20} color={accentColor} />
-            <Text style={[styles.cardTitle, { color: textColor }]}>Settings</Text>
-          </View>
-          
-          <TouchableOpacity 
-            style={[styles.settingItem, { borderColor }]}
-            onPress={() => Alert.alert('Coming Soon', 'Notifications settings will be available soon!')}
-          >
-            <View style={styles.settingContent}>
-              <FontAwesome name="bell-o" size={22} color={textColor} />
-              <Text style={[styles.settingText, { color: textColor }]}>Notifications</Text>
-            </View>
-            <FontAwesome name="angle-right" size={20} color="#bdc3c7" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.settingItem, { borderColor }]}
-            onPress={() => Alert.alert('Coming Soon', 'Privacy settings will be available soon!')}
-          >
-            <View style={styles.settingContent}>
-              <FontAwesome name="shield" size={22} color={textColor} />
-              <Text style={[styles.settingText, { color: textColor }]}>Privacy</Text>
-            </View>
-            <FontAwesome name="angle-right" size={20} color="#bdc3c7" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.settingItem, { borderColor }]}
-            onPress={() => Alert.alert('Coming Soon', 'Language settings will be available soon!')}
-          >
-            <View style={styles.settingContent}>
-              <FontAwesome name="globe" size={22} color={textColor} />
-              <Text style={[styles.settingText, { color: textColor }]}>Language</Text>
-            </View>
-            <FontAwesome name="angle-right" size={20} color="#bdc3c7" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.settingItem, { borderColor }]}
-            onPress={() => Alert.alert('Coming Soon', 'Help & Support will be available soon!')}
-          >
-            <View style={styles.settingContent}>
-              <FontAwesome name="life-ring" size={22} color={textColor} />
-              <Text style={[styles.settingText, { color: textColor }]}>Help & Support</Text>
-            </View>
-            <FontAwesome name="angle-right" size={20} color="#bdc3c7" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Save Button */}
+        {/* Action Buttons */}
         {editing && (
           <TouchableOpacity
-            style={[styles.saveButton, { backgroundColor: accentColor }]}
-            onPress={() => updateProfile(profile)}
+            style={[styles.actionBtn, { backgroundColor: Colors.primary }]}
+            onPress={updateProfile}
             disabled={saving}
           >
             {saving ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color="#fff" size="small" />
             ) : (
               <>
-                <FontAwesome name="save" size={16} color="#fff" />
-                <Text style={styles.saveButtonText}>Save Changes</Text>
+                <MaterialIcons name="save" size={20} color="#fff" />
+                <Text style={{ color: '#fff', fontWeight: 'bold', marginLeft: 8 }}>Save Changes</Text>
               </>
             )}
           </TouchableOpacity>
         )}
 
         {/* Sign Out Button */}
-        <TouchableOpacity
-          style={[styles.signOutButton, { borderColor }]}
-          onPress={handleSignOut}
-        >
-          <FontAwesome name="sign-out" size={16} color="#e74c3c" />
-          <Text style={[styles.signOutText, { color: '#e74c3c' }]}>Sign Out</Text>
+        <TouchableOpacity style={[styles.signOutBtn, { borderColor: Colors.error }]} onPress={handleSignOut}>
+          <MaterialIcons name="logout" size={20} color={Colors.error} />
+          <Text style={{ color: Colors.error, fontWeight: 'bold', marginLeft: 8 }}>Sign Out</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+function InputField({ label, value, editable, onChangeText, multiline, containerStyle }: {label: string; value: string; editable: boolean; onChangeText: (text: string) => void; multiline?: boolean; containerStyle?: any}) {
+  return (
+    <View style={[styles.inputGroup, containerStyle]}>
+      <BodyText style={{ color: Colors.text.secondary, fontWeight: '600', marginBottom: 6 }}>{label}</BodyText>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        editable={editable}
+        multiline={multiline}
+        numberOfLines={multiline ? 3 : 1}
+        style={[styles.input, { color: editable ? Colors.text.primary : Colors.text.tertiary }]}
+        placeholderTextColor={Colors.text.tertiary}
+        placeholder={`Enter ${label.toLowerCase()}`}
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 40,
-  },
-  header: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
-  },
-  headerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  settingsButton: {
-    padding: 8,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  editButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    gap: 8,
-  },
-  editButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  avatarSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
-  },
-  avatarContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  avatar: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarPlaceholder: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarPlaceholderText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginTop: 4,
-  },
-  avatarOverlay: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%',
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarOverlayText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginTop: 4,
-  },
-  avatarLoading: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  profileInfo: {
-    flex: 1,
-    marginLeft: 16,
-  },
-  profileName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  profileEmail: {
-    fontSize: 14,
-    marginBottom: 4,
-  },
-  profileOccupation: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  card: {
-    margin: 16,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-    gap: 12,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  inputGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  interestsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  interestButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  interestText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  settingItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  settingContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  settingText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  saveButton: {
-    margin: 16,
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  signOutButton: {
-    margin: 16,
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  signOutText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginTop: 16,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorText: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginTop: 16,
-  },
-  retryButton: {
-    marginTop: 16,
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  retryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  container: { flex: 1 },
+  scrollContent: { paddingVertical: 16, paddingBottom: 40 },
+  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  headerContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 16, gap: 8 },
+  editBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: BorderRadius.full, justifyContent: 'center' },
+  retryBtn: { marginTop: 16, paddingHorizontal: 24, paddingVertical: 12, borderRadius: BorderRadius.lg, alignItems: 'center' },
+  avatarCard: { marginHorizontal: 16, marginVertical: 8, flexDirection: 'row', alignItems: 'center' },
+  avatarContainer: { width: 80, height: 80, borderRadius: 40, borderWidth: 3, borderColor: Colors.primary, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  avatar: { width: '100%', height: '100%' },
+  avatarPlaceholder: { justifyContent: 'center', alignItems: 'center', backgroundColor: `${Colors.primary}10`, width: '100%', height: '100%' },
+  avatarOverlay: { position: 'absolute', width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
+  avatarOverlayText: { color: '#fff', fontSize: 11, fontWeight: 'bold', marginTop: 6 },
+  card: { marginHorizontal: 16, marginVertical: 8 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  inputGroup: { marginBottom: 12 },
+  input: { borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.lg, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, backgroundColor: Colors.background.light },
+  twoColumns: { flexDirection: 'row', marginBottom: 12 },
+  interestsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  interestBadge: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginHorizontal: 16, marginVertical: 8, paddingVertical: 14, borderRadius: BorderRadius.lg },
+  signOutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginHorizontal: 16, marginVertical: 8, paddingVertical: 14, borderRadius: BorderRadius.lg, borderWidth: 2 },
 });

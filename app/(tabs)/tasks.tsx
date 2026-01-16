@@ -7,11 +7,13 @@ import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TextI
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeColor } from '../../hooks/useThemeColor';
 import VoiceService from '../../services/VoiceService';
-import { GEMINI_API_KEY, isGeminiAvailable } from '../../constants/config';
+import { GEMINI_API_KEY, isGeminiAvailable, getGeminiModel } from '../../constants/config';
 import FirebaseTaskService, { Task } from '../../services/firebaseTaskService';
 import NotificationService from '../../services/notificationService';
 import UserService from '../../services/userService';
-import { auth } from '../../services/firebase';
+import { getAuth, onAuthStateChanged } from '../../config/firebase';
+import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../../constants/newDesignSystem';
+import { StyledHeader, PrimaryCard, StyledCard, StyledButton, Heading2, CaptionText, BodyText } from '../../components/StyledComponents';
 
 // Initialize Gemini API
 const genAI = isGeminiAvailable() ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
@@ -22,18 +24,19 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     priority: Notifications.AndroidNotificationPriority.MAX,
   }),
 });
 
 export default function TasksScreen() {
-  
-  // Use white background for all layouts
-  const backgroundColor = '#ffffff';
-  const cardBackground = '#ffffff';
-  const textColor = useThemeColor({ light: '#333333', dark: '#333333' }, 'text');
-  const accentColor = useThemeColor({ light: '#2E7D32', dark: '#2E7D32' }, 'tint');
-  const borderColor = '#e0e0e0';
+  // Design system colors
+  const backgroundColor = Colors.background.light;
+  const cardBackground = Colors.white;
+  const textColor = Colors.text.primary;
+  const accentColor = Colors.primary;
+  const borderColor = Colors.border;
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [newTask, setNewTask] = useState('');
@@ -46,7 +49,9 @@ export default function TasksScreen() {
   const [expoPushToken, setExpoPushToken] = useState<string | undefined>();
   const [lastSpeechTime, setLastSpeechTime] = useState<number>(0);
   const AUTO_STOP_DELAY = 1500; // 1.5 seconds delay before auto-stopping
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
+  const [selectedStatus, setSelectedStatus] = useState<'ongoing' | 'completed' | 'all'>('ongoing');
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'farming' | 'personal' | 'general'>('all');
   const categories: ('all' | 'farming' | 'personal' | 'general')[] = ['all', 'farming', 'personal', 'general'];
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -55,7 +60,34 @@ export default function TasksScreen() {
   const taskService = useMemo(() => FirebaseTaskService.getInstance(), []);
 
   useEffect(() => {
+    console.log('TasksScreen: Setting up auth listener');
+    const auth = getAuth();
+    
+    // Check if auth is available (it's null on Expo Go)
+    if (!auth) {
+      console.warn('TasksScreen: Auth not available on this platform (Expo Go) - Using Demo Mode');
+      // Demo mode: set a default user for Expo Go
+      setCurrentUser({ uid: 'demo-user', email: 'demo@smartbharat.local' });
+      return;
+    }
+    
+    // Listen for auth state changes
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      console.log('TasksScreen: Auth state changed, user:', user?.uid);
+      setCurrentUser(user);
+    });
+    
+    return () => unsubscribeAuth();
+  }, []);
+
+  useEffect(() => {
     console.log('TasksScreen: Component mounted, setting up task listener');
+    
+    // Only initialize if user is authenticated
+    if (!currentUser) {
+      console.log('TasksScreen: User not authenticated, waiting...');
+      return;
+    }
     
     // Initialize notifications and register FCM tokens
     const initializeNotifications = async () => {
@@ -270,7 +302,7 @@ export default function TasksScreen() {
       setIsProcessing(true);
       setError(null);
       
-      const model = genAI?.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const model = getGeminiModel(genAI);
       
       // First check if this is a task completion command
       const completionPatterns = [
@@ -490,11 +522,15 @@ export default function TasksScreen() {
         console.log('TasksScreen: Chatbot task data from AI:', taskData);
         
         // Check if user is authenticated
-        const currentUser = auth.currentUser;
-        console.log('TasksScreen: Current user:', currentUser?.uid);
+        console.log('TasksScreen: Current user from state:', currentUser?.uid);
         
-        if (!currentUser) {
-          console.error('TasksScreen: No authenticated user found');
+        // Also check directly from Firebase auth to make sure
+        const auth = getAuth();
+        const directUser = auth.currentUser;
+        console.log('TasksScreen: Direct user from auth:', directUser?.uid);
+        
+        if (!currentUser && !directUser) {
+          console.error('TasksScreen: No authenticated user found in either state or auth');
           setError('Please log in to add tasks.');
           return;
         }
@@ -664,264 +700,140 @@ export default function TasksScreen() {
     }
   };
 
-  const totalTasksCount = tasks.length;
-
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor }]}>
-      <View style={[styles.header, { borderBottomColor: borderColor }]}>
-        <Text style={[styles.headerTitle, { color: textColor }]}>My Farm Tasks</Text>
-        <View style={styles.headerButtons}>
-          <TouchableOpacity 
-            style={[styles.refreshButton, { backgroundColor: accentColor }]}
-            onPress={refreshTasks}
-          >
-            <FontAwesome name="refresh" size={16} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.clearAllButton, { backgroundColor: '#dc3545' }]}
-            onPress={() => {
-              console.log('TasksScreen: Clear All button pressed');
-              console.log('TasksScreen: Showing custom confirmation dialog...');
-              setShowClearConfirm(true);
-            }}
-          >
-            <Text style={styles.clearAllButtonText}>Clear All</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.testNotificationButton, { backgroundColor: '#007bff' }]}
-            onPress={async () => {
-              console.log('TasksScreen: Test notification button pressed');
-              try {
-                const notificationService = NotificationService.getInstance();
-                await notificationService.showLocalNotification(
-                  'Test Notification',
-                  'This is a test notification from Smart Bharat!',
-                  { test: true }
-                );
-                console.log('TasksScreen: Test notification sent');
-              } catch (error) {
-                console.error('TasksScreen: Error sending test notification:', error);
-              }
-            }}
-          >
-            <Text style={styles.testNotificationButtonText}>Test Notification</Text>
-          </TouchableOpacity>
+    <SafeAreaView style={[styles.container, { backgroundColor: Colors.background.light }]}>
+      {/* Header */}
+      <StyledHeader 
+        title="My Tasks"
+        subtitle="FARM OPERATIONS"
+        rightActions={
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={refreshTasks}
+            >
+              <MaterialIcons
+                name="history"
+                size={20}
+                color={Colors.text.secondary}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => setSelectedStatus(selectedStatus === 'ongoing' ? 'completed' : 'ongoing')}
+            >
+              <MaterialIcons
+                name="tune"
+                size={20}
+                color={Colors.text.secondary}
+              />
+            </TouchableOpacity>
+          </View>
+        }
+      />
+
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* Voice Command Card */}
+        <PrimaryCard>
+          <View style={styles.voiceCardContent}>
+            <View style={styles.voiceInfo}>
+              <View style={styles.voiceIconContainer}>
+                <MaterialIcons name="mic" size={24} color={Colors.white} />
+              </View>
+              <View>
+                <Text style={styles.voiceTitle}>Voice Command</Text>
+                <Text style={styles.voiceSubtitle}>
+                  {isListening ? currentTranscript || 'Listening...' : '"Add task: Check irrigation..."'}
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              onPress={toggleListening}
+              style={[styles.voiceButton, isListening && styles.voiceButtonActive]}
+              activeOpacity={0.7}
+            >
+              {isListening ? (
+                <View style={styles.voiceWaveform}>
+                  <View style={[styles.waveBars, { height: '40%' }]} />
+                  <View style={[styles.waveBars, { height: '70%' }]} />
+                  <View style={[styles.waveBars, { height: '40%' }]} />
+                </View>
+              ) : (
+                <MaterialIcons name="mic" size={20} color={Colors.white} />
+              )}
+            </TouchableOpacity>
+          </View>
+        </PrimaryCard>
+
+        {/* Add Task Input */}
+        <View style={styles.addTaskSection}>
+          <View style={styles.addTaskContainer}>
+            <MaterialIcons name="add" size={20} color={Colors.text.tertiary} />
+            <TextInput
+              style={styles.addTaskInput}
+              placeholder="Add a new task..."
+              placeholderTextColor={Colors.text.tertiary}
+              value={newTask}
+              onChangeText={setNewTask}
+              onSubmitEditing={addTask}
+            />
+            <TouchableOpacity onPress={addTask} disabled={!newTask.trim()}>
+              <Text style={[styles.createButton, !newTask.trim() && { opacity: 0.5 }]}>CREATE</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
 
-      {/* Voice Assistant Section */}
-      <View style={[styles.voiceSection, { borderBottomColor: borderColor }]}>
-        <View style={styles.voiceHeader}>
-          <Text style={[styles.voiceTitle, { color: textColor }]}>Voice Assistant</Text>
-          <TouchableOpacity 
-            style={[styles.micButton, isListening && styles.micButtonActive]} 
-            onPress={toggleListening}
+        {/* Status Filters */}
+        <View style={styles.statusFilters}>
+          <TouchableOpacity
+            style={[styles.statusFilter, selectedStatus === 'ongoing' && styles.statusFilterActive]}
+            onPress={() => setSelectedStatus('ongoing')}
           >
-            <FontAwesome name={isListening ? "microphone" : "microphone-slash"} size={20} color={isListening ? "#fff" : accentColor} />
-          </TouchableOpacity>
-        </View>
-        
-        {isListening ? (
-          <View style={styles.recordingContainer}>
-            <ActivityIndicator size="small" color={accentColor} />
-            <Text style={[styles.recordingText, { color: textColor }]}>Listening...</Text>
-          </View>
-        ) : null}
-        
-        {currentTranscript ? (
-          <View style={[styles.transcriptContainer, { borderColor }]}>
-            <Text style={[styles.transcriptLabel, { color: textColor }]}>You said:</Text>
-            <Text style={[styles.transcriptText, { color: textColor }]}>{currentTranscript}</Text>
-          </View>
-        ) : null}
-        
-        {isProcessing ? (
-          <View style={styles.processingContainer}>
-            <ActivityIndicator size="small" color={accentColor} />
-            <Text style={[styles.processingText, { color: textColor }]}>Processing your request...</Text>
-          </View>
-        ) : null}
-        
-        {assistantResponse ? (
-          <View style={[styles.responseContainer, { borderColor }]}>
-            <Text style={[styles.responseLabel, { color: textColor }]}>Assistant:</Text>
-            <Text style={[styles.responseText, { color: textColor }]}>{assistantResponse}</Text>
-          </View>
-        ) : null}
-        
-        {error ? (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        ) : null}
-      </View>
-
-      {/* Manual Task Input */}
-      <View style={[styles.inputContainer, { borderBottomColor: borderColor }]}>
-        <TextInput
-          style={[styles.input, { color: textColor, borderColor }]}
-          placeholder="Add a new task..."
-          placeholderTextColor="#999"
-          value={newTask}
-          onChangeText={setNewTask}
-          onSubmitEditing={addTask}
-        />
-        <TouchableOpacity 
-          style={[styles.addButton, { backgroundColor: accentColor }]} 
-          onPress={addTask}
-          disabled={isProcessing}
-        >
-          {isProcessing ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <FontAwesome name="plus" size={20} color="#fff" />
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {/* Status chips row (Ongoing / Completed / All) */}
-      <View style={styles.statusChipsContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.statusChip}>
-            <Text style={styles.statusChipText}>
+            <Text style={[styles.statusFilterText, selectedStatus === 'ongoing' && styles.statusFilterTextActive]}>
               Ongoing ({ongoingTasks.length})
             </Text>
-          </View>
-          <View style={styles.statusChip}>
-            <Text style={styles.statusChipText}>
-              Completed ({completedTasks.length})
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.statusFilter, selectedStatus === 'completed' && styles.statusFilterActive]}
+            onPress={() => setSelectedStatus('completed')}
+          >
+            <Text style={[styles.statusFilterText, selectedStatus === 'completed' && styles.statusFilterTextActive]}>
+              Done ({completedTasks.length})
             </Text>
-          </View>
-          <View style={styles.statusChip}>
-            <Text style={styles.statusChipText}>
-              All ({totalTasksCount})
-            </Text>
-          </View>
-        </ScrollView>
-      </View>
+          </TouchableOpacity>
+        </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {filteredTasks.length === 0 && completedTasks.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <FontAwesome name="tasks" size={48} color="#ced4da" />
-            <Text style={styles.emptyText}>No Tasks Yet</Text>
-            <Text style={styles.emptySubtext}>
-              Add a new task using the input below or the voice assistant.
-            </Text>
-          </View>
-        ) : (
-          <>
-            {Object.entries(groupedTasks).map(([priority, tasks]) =>
-              tasks.length > 0 ? (
-                <View key={priority} style={styles.prioritySection}>
-                  <Text style={styles.priorityTitle}>
-                    {priority.charAt(0).toUpperCase() + priority.slice(1)} Priority
-                  </Text>
-                  {tasks.map(task => (
-                    <View key={task.id} style={styles.taskCard}>
-                      <TouchableOpacity
-                        style={styles.checkboxContainer}
-                        onPress={() => toggleTaskStatus(task.id)}
-                      >
-                        <FontAwesome
-                          name={task.completed ? 'check-square-o' : 'square-o'}
-                          size={20}
-                          color={task.completed ? '#2E7D32' : '#6c757d'}
-                        />
-                      </TouchableOpacity>
+        {/* Tasks List */}
+        <View style={styles.tasksContainer}>
+          {selectedStatus === 'ongoing' && ongoingTasks.length === 0 ? (
+            <EmptyState title="No active tasks" subtitle="Your farming schedule is clear. Add a new task to begin." />
+          ) : selectedStatus === 'completed' && completedTasks.length === 0 ? (
+            <EmptyState title="No completed tasks" subtitle="You haven't completed any tasks yet." />
+          ) : (
+            <>
+              {selectedStatus === 'ongoing' && ongoingTasks.length > 0 && (
+                <TaskGroup title="High Priority" tasks={ongoingTasks.filter(t => t.priority === 'high')} onToggle={toggleTaskStatus} onDelete={deleteTask} />
+              )}
+              {selectedStatus === 'ongoing' && ongoingTasks.filter(t => t.priority === 'medium').length > 0 && (
+                <TaskGroup title="Medium Priority" tasks={ongoingTasks.filter(t => t.priority === 'medium')} onToggle={toggleTaskStatus} onDelete={deleteTask} />
+              )}
+              {selectedStatus === 'ongoing' && ongoingTasks.filter(t => t.priority === 'low').length > 0 && (
+                <TaskGroup title="Low Priority" tasks={ongoingTasks.filter(t => t.priority === 'low')} onToggle={toggleTaskStatus} onDelete={deleteTask} />
+              )}
 
-                      <View style={styles.taskContent}>
-                        <Text style={[styles.taskTitle, task.completed && styles.completedTask]}>
-                          {task.title}
-                        </Text>
-                        <View style={styles.taskDetails}>
-                          <View style={styles.taskDetail}>
-                            <FontAwesome
-                              name="tag"
-                              size={12}
-                              color={getPriorityColor(task.priority)}
-                            />
-                            <Text style={styles.taskDetailText}>{task.priority}</Text>
-                          </View>
-                          <View style={styles.taskDetail}>
-                            <FontAwesome name={getCategoryIcon(task.category) as any} size={12} color="#6c757d" />
-                            <Text style={styles.taskDetailText}>{task.category}</Text>
-                          </View>
-                          <View style={styles.taskDetail}>
-                            <FontAwesome name="calendar" size={12} color="#6c757d" />
-                            <Text style={styles.taskDetailText}>{task.dueDate}</Text>
-                          </View>
-                          <View style={styles.taskDetail}>
-                            <FontAwesome name="clock-o" size={12} color="#6c757d" />
-                            <Text style={styles.taskDetailText}>{task.dueTime}</Text>
-                          </View>
-                        </View>
-                      </View>
-
-                      <TouchableOpacity
-                        style={styles.deleteButton}
-                        onPress={() => deleteTask(task.id)}
-                      >
-                        <FontAwesome name="trash" size={16} color="#dc3545" />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </View>
-              ) : null
-            )}
-
-            {/* Completed Tasks Section */}
-            {completedTasks.length > 0 && (
-              <View style={styles.completedSection}>
-                <Text style={styles.completedTitle}>Completed Tasks</Text>
-                {completedTasks.map(task => (
-                  <View key={task.id} style={[styles.taskCard, styles.completedTaskCard]}>
-                    <TouchableOpacity
-                      style={styles.checkboxContainer}
-                      onPress={() => toggleTaskStatus(task.id)}
-                    >
-                      <FontAwesome
-                        name="check-square-o"
-                        size={20}
-                        color="#2E7D32"
-                      />
-                    </TouchableOpacity>
-
-                    <View style={styles.taskContent}>
-                      <Text style={[styles.taskTitle, styles.completedTask]}>
-                        {task.title}
-                      </Text>
-                      <View style={styles.taskDetails}>
-                        <View style={styles.taskDetail}>
-                          <FontAwesome
-                            name="tag"
-                            size={12}
-                            color={getPriorityColor(task.priority)}
-                          />
-                          <Text style={styles.taskDetailText}>{task.priority}</Text>
-                        </View>
-                        <View style={styles.taskDetail}>
-                          <FontAwesome name={getCategoryIcon(task.category) as any} size={12} color="#6c757d" />
-                          <Text style={styles.taskDetailText}>{task.category}</Text>
-                        </View>
-                      </View>
-                    </View>
-
-                    <TouchableOpacity
-                      style={styles.deleteButton}
-                      onPress={() => deleteTask(task.id)}
-                    >
-                      <FontAwesome name="trash" size={16} color="#dc3545" />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            )}
-          </>
-        )}
+              {selectedStatus === 'completed' && completedTasks.length > 0 && (
+                completedTasks.map(task => (
+                  <TaskItem key={task.id} task={task} onToggle={toggleTaskStatus} onDelete={deleteTask} />
+                ))
+              )}
+            </>
+          )}
+        </View>
       </ScrollView>
 
-      {/* Custom Clear All Confirmation Modal */}
+      {/* Clear All Confirmation Modal */}
       {showClearConfirm && (
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -930,25 +842,17 @@ export default function TasksScreen() {
               Are you sure you want to delete all tasks? This action cannot be undone.
             </Text>
             <View style={styles.modalButtons}>
-              <TouchableOpacity 
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => {
-                  console.log('TasksScreen: Cancel pressed in custom modal');
-                  setShowClearConfirm(false);
-                }}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.modalButton, styles.clearButton]}
+              <StyledButton
+                title="Cancel"
+                onPress={() => setShowClearConfirm(false)}
+                variant="outline"
+              />
+              <StyledButton
+                title="Clear All"
                 onPress={async () => {
-                  console.log('TasksScreen: Clear All option pressed in custom modal');
                   try {
-                    console.log('TasksScreen: Starting clear all tasks...');
                     await taskService.clearAllTasks();
-                    console.log('TasksScreen: Clear all tasks completed');
-                    await refreshTasks(); // Refresh the task list after clearing
-                    console.log('TasksScreen: Tasks refreshed after clearing');
+                    await refreshTasks();
                     setShowClearConfirm(false);
                   } catch (error) {
                     console.error('Error clearing tasks:', error);
@@ -956,9 +860,8 @@ export default function TasksScreen() {
                     setShowClearConfirm(false);
                   }
                 }}
-              >
-                <Text style={styles.clearButtonText}>Clear All</Text>
-              </TouchableOpacity>
+                variant="primary"
+              />
             </View>
           </View>
         </View>
@@ -967,297 +870,360 @@ export default function TasksScreen() {
   );
 }
 
+// Helper Components
+function EmptyState({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <View style={styles.emptyState}>
+      <MaterialIcons name="inbox" size={56} color={Colors.slate[300]} />
+      <Heading2 style={styles.emptyTitle}>{title}</Heading2>
+      <BodyText style={styles.emptySubtitle}>{subtitle}</BodyText>
+    </View>
+  );
+}
+
+interface TaskGroupProps {
+  title: string;
+  tasks: Task[];
+  onToggle: (id: string) => void;
+  onDelete: (id: string) => void;
+}
+
+function TaskGroup({ title, tasks, onToggle, onDelete }: TaskGroupProps) {
+  if (tasks.length === 0) return null;
+
+  return (
+    <View style={styles.taskGroup}>
+      <View style={styles.groupHeader}>
+        <Heading2>{title}</Heading2>
+        <Text style={styles.taskCount}>{tasks.length}</Text>
+      </View>
+      {tasks.map(task => (
+        <TaskItem key={task.id} task={task} onToggle={onToggle} onDelete={onDelete} />
+      ))}
+    </View>
+  );
+}
+
+interface TaskItemProps {
+  task: Task;
+  onToggle: (id: string) => void;
+  onDelete: (id: string) => void;
+}
+
+function TaskItem({ task, onToggle, onDelete }: TaskItemProps) {
+  const taskCardStyle = task.completed ? [styles.taskCard, { opacity: 0.6 }] : styles.taskCard;
+  
+  return (
+    <StyledCard style={taskCardStyle as any} onPress={() => onToggle(task.id)}>
+      <View style={styles.taskCardContent}>
+        <TouchableOpacity
+          style={[styles.checkbox, { borderColor: Colors.primary }]}
+          onPress={() => onToggle(task.id)}
+          activeOpacity={0.7}
+        >
+          {task.completed && (
+            <MaterialIcons name="check" size={16} color={Colors.primary} />
+          )}
+        </TouchableOpacity>
+
+        <View style={styles.taskInfo}>
+          <Text style={[styles.taskTitle, task.completed && { textDecorationLine: 'line-through' }]}>
+            {task.title}
+          </Text>
+          <View style={styles.taskMeta}>
+            <MaterialIcons name="schedule" size={14} color={Colors.text.tertiary} />
+            <Text style={styles.taskDate}>{task.dueDate} at {task.dueTime}</Text>
+            {task.category !== 'general' && (
+              <View style={styles.categoryBadge}>
+                <Text style={styles.categoryBadgeText}>{task.category.toUpperCase()}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        <TouchableOpacity onPress={() => onDelete(task.id)} style={styles.deleteButton}>
+          <MaterialIcons name="close" size={20} color={Colors.error} />
+        </TouchableOpacity>
+      </View>
+    </StyledCard>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F4F8F3',
+    backgroundColor: Colors.background.light,
   },
-  header: {
+
+  scrollContent: {
+    paddingBottom: Spacing[8],
+  },
+
+  headerActions: {
+    flexDirection: 'row',
+    gap: Spacing[2],
+    marginBottom: Spacing[1],
+  },
+
+  actionButton: {
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.default,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.slate[200],
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Shadows.sm,
+  },
+
+  // Voice Card
+  voiceCardContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
   },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-  },
-  headerButtons: {
+
+  voiceInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
-  refreshButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  testButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  clearAllButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  clearAllButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  testNotificationButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  testNotificationButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    padding: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#e9ecef',
-    alignItems: 'center',
-  },
-  input: {
-    flex: 1,
-    height: 40,
-    borderWidth: 1,
-    borderColor: '#ced4da',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    fontSize: 14,
-    marginRight: 8,
-    backgroundColor: '#fff',
-  },
-  addButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scrollContent: {
-    padding: 16,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 40,
-  },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginTop: 12,
-  },
-  emptySubtext: {
-    fontSize: 12,
-    marginTop: 8,
-    textAlign: 'center',
-    color: '#6c757d',
-  },
-  taskCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#e9ecef',
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  checkboxContainer: {
-    marginRight: 12,
-    justifyContent: 'center',
-  },
-  taskContent: {
+    gap: Spacing[4],
     flex: 1,
   },
-  taskTitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  completedTask: {
-    textDecorationLine: 'line-through',
-    opacity: 0.6,
-  },
-  taskDetails: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  taskDetail: {
-    flexDirection: 'row',
+
+  voiceIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: BorderRadius.default,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 4,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
-    marginBottom: 4,
   },
-  taskDetailText: {
-    fontSize: 11,
-    marginLeft: 4,
-    color: '#6c757d',
-  },
-  deleteButton: {
-    padding: 4,
-    marginLeft: 8,
-  },
-  filterContainer: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
-    backgroundColor: '#fff',
-  },
-  filterTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-    color: '#333',
-  },
-  filterScrollView: {
-    flexDirection: 'row',
-  },
-  filterButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 18,
-    backgroundColor: '#e9ecef',
-    marginRight: 8,
-  },
-  filterButtonActive: {
-    backgroundColor: '#2E7D32',
-  },
-  filterButtonText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#333',
-  },
-  filterButtonTextActive: {
-    color: '#fff',
-  },
-  prioritySection: {
-    marginBottom: 16,
-  },
-  priorityTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 12,
-    paddingHorizontal: 4,
-  },
-  errorContainer: {
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: '#ffebee',
-    marginBottom: 12,
-  },
-  errorText: {
-    color: '#e53935',
-    fontSize: 12,
-  },
-  completedSection: {
-    marginBottom: 16,
-  },
-  completedTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 12,
-    paddingHorizontal: 4,
-  },
-  completedTaskCard: {
-    backgroundColor: '#f8f9fa',
-  },
-  voiceSection: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
-  },
-  voiceHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
+
   voiceTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginRight: 12,
+    fontSize: Typography.sizes.base,
+    fontWeight: '600',
+    color: Colors.white,
+    marginBottom: Spacing[1],
   },
-  micButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+
+  voiceSubtitle: {
+    fontSize: Typography.sizes.xs,
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontStyle: 'italic',
+  },
+
+  voiceButton: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.default,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#e9ecef',
   },
-  micButtonActive: {
-    backgroundColor: '#2E7D32',
+
+  voiceButtonActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
   },
-  recordingContainer: {
+
+  voiceWaveform: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: Spacing[1],
+    height: 20,
+  },
+
+  waveBars: {
+    width: 2,
+    backgroundColor: Colors.white,
+    borderRadius: 1,
+  },
+
+  // Add Task Section
+  addTaskSection: {
+    marginHorizontal: Spacing[4],
+    marginTop: Spacing[4],
+    paddingHorizontal: Spacing[4],
+    paddingVertical: Spacing[4],
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.default,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    ...Shadows.sm,
+  },
+
+  addTaskContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    gap: Spacing[3],
   },
-  recordingText: {
-    fontSize: 14,
-    marginLeft: 8,
+
+  addTaskInput: {
+    flex: 1,
+    fontSize: Typography.sizes.base,
+    color: Colors.text.primary,
+    paddingVertical: Spacing[2],
   },
-  transcriptContainer: {
-    padding: 12,
+
+  createButton: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: '600',
+    color: Colors.primary,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+
+  // Status Filters
+  statusFilters: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: Spacing[4],
+    paddingVertical: Spacing[4],
+    gap: Spacing[2],
+  },
+
+  statusFilter: {
+    flex: 1,
+    paddingVertical: Spacing[3],
+    paddingHorizontal: Spacing[3],
+    borderRadius: BorderRadius.default,
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    backgroundColor: Colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  statusFilterActive: {
+    backgroundColor: Colors.primary,
+  },
+
+  statusFilterText: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: '600',
+    color: Colors.primary,
+    textAlign: 'center',
+  },
+
+  statusFilterTextActive: {
+    color: Colors.white,
+  },
+
+  // Tasks Container
+  tasksContainer: {
+    paddingHorizontal: Spacing[4],
+  },
+
+  // Empty State
+  emptyState: {
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing[8],
+    alignItems: 'center',
+    marginTop: Spacing[6],
     borderWidth: 1,
-    borderColor: '#e9ecef',
-    borderRadius: 8,
-    marginBottom: 12,
+    borderColor: Colors.border,
   },
-  transcriptLabel: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 4,
+
+  emptyTitle: {
+    marginTop: Spacing[4],
   },
-  transcriptText: {
-    fontSize: 12,
+
+  emptySubtitle: {
+    marginTop: Spacing[2],
+    textAlign: 'center',
+    color: Colors.text.secondary,
   },
-  processingContainer: {
+
+  // Task Group
+  taskGroup: {
+    marginVertical: Spacing[4],
+  },
+
+  groupHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing[3],
+  },
+
+  taskCount: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: '600',
+    color: Colors.text.secondary,
+    backgroundColor: Colors.slate[100],
+    paddingHorizontal: Spacing[2],
+    paddingVertical: Spacing[1],
+    borderRadius: BorderRadius.full,
+  },
+
+  // Task Card
+  taskCard: {
+    marginHorizontal: 0,
+    marginVertical: Spacing[2],
+    paddingHorizontal: Spacing[4],
+    paddingVertical: Spacing[3],
+  },
+
+  taskCardContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    gap: Spacing[3],
   },
-  processingText: {
-    fontSize: 14,
-    marginLeft: 8,
+
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  responseContainer: {
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#e9ecef',
-    borderRadius: 8,
-    marginBottom: 12,
+
+  taskInfo: {
+    flex: 1,
   },
-  responseLabel: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 4,
+
+  taskTitle: {
+    fontSize: Typography.sizes.base,
+    fontWeight: '600',
+    color: Colors.text.primary,
+    marginBottom: Spacing[2],
   },
-  responseText: {
-    fontSize: 12,
+
+  taskMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing[2],
   },
+
+  taskDate: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.text.tertiary,
+  },
+
+  categoryBadge: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing[2],
+    paddingVertical: Spacing[1],
+    borderRadius: BorderRadius.full,
+    marginLeft: Spacing[2],
+  },
+
+  categoryBadgeText: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: '600',
+    color: Colors.white,
+  },
+
+  deleteButton: {
+    padding: Spacing[2],
+  },
+
+  // Modal
   modalOverlay: {
     position: 'absolute',
     top: 0,
@@ -1268,68 +1234,34 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+
   modalContent: {
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 10,
-    width: '80%',
+    backgroundColor: Colors.white,
+    padding: Spacing[6],
+    borderRadius: BorderRadius.lg,
+    width: '85%',
     alignItems: 'center',
+    ...Shadows.lg,
   },
+
   modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
+    fontSize: Typography.sizes.xl,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginBottom: Spacing[2],
   },
+
   modalMessage: {
-    fontSize: 14,
-    marginBottom: 20,
+    fontSize: Typography.sizes.base,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+    marginBottom: Spacing[6],
+    lineHeight: Typography.sizes.base * 1.5,
   },
+
   modalButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: Spacing[3],
     width: '100%',
-  },
-  modalButton: {
-    padding: 12,
-    borderRadius: 6,
-    flex: 1,
-    marginHorizontal: 5,
-  },
-  cancelButton: {
-    backgroundColor: '#6c757d',
-  },
-  cancelButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  clearButton: {
-    backgroundColor: '#dc3545',
-  },
-  clearButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  statusChipsContainer: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#F4F8F3',
-  },
-  statusChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#2E7D32',
-    marginRight: 8,
-    backgroundColor: '#FFFFFF',
-  },
-  statusChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#2E7D32',
   },
 });

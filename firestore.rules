@@ -12,6 +12,21 @@ service cloud.firestore {
         (resource == null || resource.data.userId == request.auth.uid) &&
         (request.resource == null || request.resource.data.userId == request.auth.uid);
     }
+
+    // Equipment collection - anyone can read, authenticated users can create/update their own
+    match /equipment/{equipmentId} {
+      allow read: if true;
+      allow create: if request.auth != null && 
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.name is string &&
+        request.resource.data.dailyRate is number &&
+        request.resource.data.category is string &&
+        request.resource.data.city is string &&
+        request.resource.data.state is string &&
+        request.resource.data.phone is string;
+      allow update, delete: if request.auth != null && 
+        resource.data.userId == request.auth.uid;
+    }
     
     // Schemes collection - anyone can read, but only admins can write
     match /schemes/{schemeId} {

@@ -1,7 +1,35 @@
-export const GEMINI_API_KEY = 'AIzaSyBlfOPGjxA_vF-smaFGhqj1eo8ChK67jgU';
+export const GEMINI_API_KEY = 'AIzaSyDGzlWAvbh75mP5wS0M8OIM4bZQoWt2h8s';
+
+// List of Gemini models to try in order (fallback chain)
+export const GEMINI_MODELS = [
+  'gemini-3-flash-preview',
+  'gemini-2.0-flash',
+  'gemini-1.5-pro',
+  'gemini-1.5-flash',
+  'gemini-pro',
+];
 
 export const isGeminiAvailable = () => {
   return !!GEMINI_API_KEY;
+};
+
+// Helper function to get a working Gemini model with fallback support
+export const getGeminiModel = (genAI: any) => {
+  if (!genAI) return null;
+  
+  // Try models in order, return the first one available
+  for (const modelName of GEMINI_MODELS) {
+    try {
+      return genAI.getGenerativeModel({ model: modelName });
+    } catch (error) {
+      console.warn(`Model ${modelName} not available, trying next...`);
+      continue;
+    }
+  }
+  
+  // Fallback to first model if all fail
+  console.warn('No models available, using default gemini-1.5-pro');
+  return genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
 };
 
 // Base URL of the FastAPI backend serving the local plant disease model.

@@ -1,5 +1,5 @@
 import { doc, collection, addDoc, updateDoc, deleteDoc, getDocs, getDoc, query, where, orderBy, onSnapshot } from 'firebase/firestore';
-import { db, auth } from './firebase';
+import { getDb, getAuth } from '../config/firebase';
 import NotificationService from './notificationService';
 
 // Define Task interface
@@ -30,9 +30,21 @@ class FirebaseTaskService {
     return FirebaseTaskService.instance;
   }
 
+  // Helper to get database instance with error handling
+  private getDbInstance() {
+    const dbInstance = getDb();
+    if (!dbInstance) {
+      throw new Error('Firebase Database not initialized');
+    }
+    return dbInstance;
+  }
+
   // Get current user ID
   private getCurrentUserId(): string | null {
-    return auth.currentUser?.uid || null;
+    const authInstance = getAuth();
+    const userId = authInstance?.currentUser?.uid || null;
+    console.log('FirebaseTaskService: getCurrentUserId - authInstance:', !!authInstance, 'currentUser:', !!authInstance?.currentUser, 'uid:', userId);
+    return userId;
   }
 
   // Add listener for task updates
@@ -72,7 +84,7 @@ class FirebaseTaskService {
       this.unsubscribe();
     }
 
-    const tasksRef = collection(db, 'tasks');
+    const tasksRef = collection(this.getDbInstance(), 'tasks');
     const q = query(
       tasksRef,
       where('userId', '==', userId),
@@ -115,7 +127,7 @@ class FirebaseTaskService {
 
     console.log('FirebaseTaskService: Final task object:', task);
 
-    const docRef = await addDoc(collection(db, 'tasks'), task);
+    const docRef = await addDoc(collection(this.getDbInstance(), 'tasks'), task);
     const createdTask = { id: docRef.id, ...task };
     
     console.log('FirebaseTaskService: Added task with ID:', docRef.id);
@@ -139,7 +151,7 @@ class FirebaseTaskService {
       throw new Error('User not authenticated');
     }
 
-    const taskRef = doc(db, 'tasks', taskId);
+    const taskRef = doc(this.getDbInstance(), 'tasks', taskId);
     const taskDoc = await getDoc(taskRef);
     
     if (!taskDoc.exists()) {
@@ -165,7 +177,7 @@ class FirebaseTaskService {
     }
 
     // Verify task belongs to user
-    const taskRef = doc(db, 'tasks', taskId);
+    const taskRef = doc(this.getDbInstance(), 'tasks', taskId);
     const taskDoc = await getDoc(taskRef);
     
     if (!taskDoc.exists()) {
@@ -197,7 +209,7 @@ class FirebaseTaskService {
     }
 
     // Verify task belongs to user
-    const taskRef = doc(db, 'tasks', taskId);
+    const taskRef = doc(this.getDbInstance(), 'tasks', taskId);
     const taskDoc = await getDoc(taskRef);
     
     if (!taskDoc.exists()) {
@@ -222,7 +234,7 @@ class FirebaseTaskService {
       return [];
     }
 
-    const tasksRef = collection(db, 'tasks');
+    const tasksRef = collection(this.getDbInstance(), 'tasks');
     const q = query(
       tasksRef,
       where('userId', '==', userId),
@@ -244,8 +256,7 @@ class FirebaseTaskService {
     if (!userId) {
       return [];
     }
-
-    const tasksRef = collection(db, 'tasks');
+ tasksRef = collection(this.getDbInstance(), 'tasks');
     let q;
 
     if (category === 'all') {
@@ -279,7 +290,7 @@ class FirebaseTaskService {
       return [];
     }
 
-    const tasksRef = collection(db, 'tasks');
+    const tasksRef = collection(this.getDbInstance(), 'tasks');
     const q = query(
       tasksRef,
       where('userId', '==', userId),
@@ -303,7 +314,7 @@ class FirebaseTaskService {
       return [];
     }
 
-    const tasksRef = collection(db, 'tasks');
+    const tasksRef = collection(this.getDbInstance(), 'tasks');
     const q = query(
       tasksRef,
       where('userId', '==', userId),
@@ -433,7 +444,7 @@ class FirebaseTaskService {
 
     console.log('FirebaseTaskService: Clearing all tasks for user:', userId);
     
-    const tasksRef = collection(db, 'tasks');
+    const tasksRef = collection(this.getDbInstance(), 'tasks');
     const q = query(tasksRef, where('userId', '==', userId));
     const snapshot = await getDocs(q);
     

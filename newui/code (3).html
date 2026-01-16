@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Rent Your Equipment - Smart Agriculture App</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#2D6A4F", // Nature-inspired deep green
+                        secondary: "#40916C",
+                        "background-light": "#F8FAF9",
+                        "background-dark": "#121212",
+                        accent: "#74C69D",
+                    },
+                    fontFamily: {
+                        display: ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "12px",
+                    },
+                },
+            },
+        };
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }.no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+<header class="sticky top-0 z-10 bg-white/80 dark:bg-black/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 py-4 flex items-center">
+<button class="p-2 -ml-2 text-slate-600 dark:text-slate-400">
+<span class="material-icons-round">arrow_back_ios_new</span>
+</button>
+<h1 class="text-xl font-bold ml-2 text-primary">Rent Your Equipment</h1>
+</header>
+<main class="flex-1 overflow-y-auto px-4 py-6">
+<div class="mb-8 px-2">
+<div class="flex items-center justify-between relative">
+<div class="absolute top-1/2 left-0 w-full h-0.5 bg-slate-200 dark:bg-slate-800 -translate-y-1/2 z-0"></div>
+<div class="z-10 flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center font-bold text-sm">1</div>
+<span class="text-xs mt-2 font-semibold text-primary">Details</span>
+</div>
+<div class="z-10 flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center font-bold text-sm border-2 border-white dark:border-background-dark">2</div>
+<span class="text-xs mt-2 font-medium text-slate-500">Photos</span>
+</div>
+<div class="z-10 flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center font-bold text-sm border-2 border-white dark:border-background-dark">3</div>
+<span class="text-xs mt-2 font-medium text-slate-500">Review</span>
+</div>
+</div>
+</div>
+<section class="space-y-6">
+<h2 class="text-lg font-bold flex items-center gap-2">
+<span class="material-icons-round text-primary">assignment</span>
+                Equipment Information
+            </h2>
+<div class="space-y-4">
+<div class="space-y-1.5">
+<label class="text-sm font-semibold text-slate-600 dark:text-slate-400 ml-1">Equipment Type *</label>
+<div class="relative">
+<select class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3.5 appearance-none focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all">
+<option>Tractor</option>
+<option>Harvester</option>
+<option>Rotavator</option>
+<option>Plow</option>
+</select>
+<span class="material-icons-round absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">expand_more</span>
+</div>
+</div>
+<div class="space-y-1.5">
+<label class="text-sm font-semibold text-slate-600 dark:text-slate-400 ml-1">Title *</label>
+<input class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3.5 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all" placeholder="e.g., John's Heavy-Duty Tractor" type="text"/>
+</div>
+<div class="space-y-1.5">
+<label class="text-sm font-semibold text-slate-600 dark:text-slate-400 ml-1">Description *</label>
+<textarea class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3.5 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all resize-none" placeholder="Mention hours of use, condition, and any specific attachments included..." rows="4"></textarea>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="space-y-1.5">
+<label class="text-sm font-semibold text-slate-600 dark:text-slate-400 ml-1">Daily Rate (₹) *</label>
+<div class="relative">
+<span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium">₹</span>
+<input class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl pl-8 pr-4 py-3.5 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all" placeholder="1,500" type="number"/>
+</div>
+</div>
+<div class="space-y-1.5">
+<label class="text-sm font-semibold text-slate-600 dark:text-slate-400 ml-1">Location *</label>
+<div class="relative">
+<span class="material-icons-round absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">location_on</span>
+<input class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl pl-10 pr-4 py-3.5 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all" placeholder="City/Village" type="text"/>
+</div>
+</div>
+</div>
+<div class="space-y-1.5">
+<label class="text-sm font-semibold text-slate-600 dark:text-slate-400 ml-1">Contact Number *</label>
+<div class="relative">
+<span class="material-icons-round absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">phone</span>
+<input class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl pl-10 pr-4 py-3.5 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all" placeholder="9876543210" type="tel"/>
+</div>
+</div>
+</div>
+</section>
+<section class="mt-8 mb-10 space-y-4">
+<div class="flex items-center justify-between">
+<h2 class="text-lg font-bold flex items-center gap-2">
+<span class="material-icons-round text-primary">add_a_photo</span>
+                    Equipment Photos
+                </h2>
+<span class="text-xs font-medium text-slate-500">Min. 1 photo</span>
+</div>
+<div class="flex gap-3 overflow-x-auto no-scrollbar pb-2">
+<button class="flex-shrink-0 w-32 h-32 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl flex flex-col items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+<span class="material-icons-round text-primary text-3xl">add_circle_outline</span>
+<span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Add Photo</span>
+</button>
+<div class="flex-shrink-0 w-32 h-32 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center border border-slate-200 dark:border-slate-800 overflow-hidden relative group">
+<img alt="Equipment Preview" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDd7g-AtBtNItZ9czgS3hfAeM3f5Ni6nKdphftmAhxxtCebnwm0VI2FGcyEtyAkS8_61Gei2RON0CNJ2ivUWwRUq5b6jhPY1HzMfxgCIGhWu029Tv6RaPppzpvVFZ4B0CwQLVrqBiOvZFUMLmHOO4Pk1RzqrXFRuXgntC6YuX2gjGMpntVD9y5ol8v1zVwUi4BAjOVooUjYujpFwactJi4ORZLCmjsFd-j2ZAPTOf4p7CyoM7DqOU9fLd1o_dScp2XKKnXV2TEv4g"/>
+<button class="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="material-icons-round text-sm">close</span>
+</button>
+</div>
+<div class="flex-shrink-0 w-32 h-32 bg-slate-100 dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center justify-center opacity-40">
+<span class="material-icons-round text-slate-400">image</span>
+</div>
+</div>
+<p class="text-xs text-slate-500 italic">Clear photos from multiple angles help you get more bookings.</p>
+</section>
+</main>
+<footer class="p-4 bg-white dark:bg-black border-t border-slate-200 dark:border-slate-800 flex items-center gap-4">
+<button class="flex-1 py-4 font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-xl transition-colors">
+            CANCEL
+        </button>
+<button class="flex-[2] py-4 bg-primary hover:bg-secondary text-white font-bold rounded-xl shadow-lg shadow-primary/20 transition-all active:scale-[0.98] uppercase tracking-wide">
+            Publish Listing
+        </button>
+</footer>
+<div class="fixed bottom-24 right-4">
+<button class="w-12 h-12 rounded-full bg-white dark:bg-slate-800 shadow-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center text-primary" onclick="document.documentElement.classList.toggle('dark')">
+<span class="material-icons-round">dark_mode</span>
+</button>
+</div>
+
+</body></html>

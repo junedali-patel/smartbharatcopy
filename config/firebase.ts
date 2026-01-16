@@ -1,8 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
-import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
-import { getMessaging } from 'firebase/messaging';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -16,33 +13,88 @@ const firebaseConfig = {
   measurementId: "G-SP687GD64W"
 };
 
-// Initialize Firebase
+// Initialize Firebase app (this is safe, doesn't require native modules)
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// Initialize Firestore
-const db = getFirestore(app);
+// Lazy initialize Firestore and Auth - only on web or production builds
+let db: any = null;
+let auth: any = null;
+let messaging: any = null;
+let isInitialized = false;
 
-// Initialize Auth with AsyncStorage persistence
-let auth;
-try {
-  auth = initializeAuth(app, {
-    persistence: getReactNativePersistence(AsyncStorage)
-  });
-} catch (error) {
-  // If already initialized, get the existing instance
-  const { getAuth } = require('firebase/auth');
-  auth = getAuth(app);
-}
+const initializeServices = () => {
+  if (isInitialized) return;
+  isInitialized = true;
 
-// Initialize Messaging (only in browser environment)
-let messaging = null;
-if (typeof window !== 'undefined') {
   try {
-    messaging = getMessaging(app);
+    if (Platform.OS === 'web') {
+      // Web platform - safe to use full Firebase
+      const { getFirestore } = require('firebase/firestore');
+      const { getAuth: FirebaseGetAuth } = require('firebase/auth');
+      
+      db = getFirestore(app);
+      auth = FirebaseGetAuth(app);
+      
+      // Skip Firebase Messaging on web as it's not supported
+      messaging = null;
+    } else {
+      // Native platform - use minimal approach
+      try {
+        const { getFirestore } = require('firebase/firestore');
+        const { initializeAuth, getReactNativePersistence } = require('firebase/auth');
+        const { getAuth: FirebaseGetAuth } = require('firebase/auth');
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        
+        db = getFirestore(app);
+        
+        try {
+          auth = initializeAuth(app, {
+            persistence: getReactNativePersistence(AsyncStorage)
+          });
+        } catch (error) {
+          // Already initialized or Expo Go - use getAuth as fallback
+          try {
+            auth = FirebaseGetAuth(app);
+          } catch (e) {
+            console.warn('Firebase Auth not available on this platform (Expo Go)');
+            auth = null;
+          }
+        }
+      } catch (error) {
+        console.warn('Firebase services initialization failed on native platform:', error);
+        // Gracefully degrade - these will be null on Expo Go
+        db = null;
+        auth = null;
+      }
+    }
   } catch (error) {
-    console.warn('Failed to initialize Firebase Messaging:', error);
+    console.error('Failed to initialize Firebase services:', error);
   }
-}
+};
 
-export { db, auth, messaging };
-export default app;
+// Helper functions to get instances (used by Firebase functions like collection(), getDocs(), etc.)
+const getDb = () => {
+  if (!isInitialized) {
+    initializeServices();
+  }
+  return db;
+};
+
+const getAuth = () => {
+  if (!isInitialized) {
+    initializeServices();
+  }
+  return auth;
+};
+
+const getMessaging = () => {
+  if (!isInitialized) {
+    initializeServices();
+  }
+  return messaging;
+};
+
+export { getDb, getAuth, getMessaging, app as default };
+
+// Re-export auth functions for convenience
+export { onAuthStateChanged } from 'firebase/auth';

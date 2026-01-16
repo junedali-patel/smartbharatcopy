@@ -3,20 +3,23 @@ import FarmerServicesModal from '../../components/FarmerServicesModal';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Audio } from 'expo-av';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Image, ImageBackground, Linking, Platform, Modal, TextInput, KeyboardAvoidingView, ActivityIndicator, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeColor } from '../../hooks/useThemeColor';
-import { db, auth } from '../../services/firebase';
+import { getDb, getAuth } from '../../config/firebase';
 import VoiceService from '../../services/VoiceService';
-import { GEMINI_API_KEY, isGeminiAvailable } from '../../constants/config';
+import { GEMINI_API_KEY, isGeminiAvailable, getGeminiModel } from '../../constants/config';
 import CropDiseaseModal from '../../components/CropDiseaseModal';
 import FirebaseTaskService, { Task } from '../../services/firebaseTaskService';
 import SchemeService from '../../services/schemeService';
 import WeatherService, { WeatherData } from '../../services/weatherService';
+import ScrollStack from '../../components/ScrollStack';
+import NewsCard from '../../components/NewsCard';
+import StickyScrollStack from '../../components/ScrollStack';
 
 type TabRoute = '/' | '/schemes' | '/explore' | '/tasks' | '/profile';
 
@@ -66,6 +69,7 @@ const NewsSection = ({ userLocation }: { userLocation: { city: string; state: st
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isGeneralNews, setIsGeneralNews] = useState(false);
+  const [currentNewsIndex, setCurrentNewsIndex] = useState(0);
   const accentColor = useThemeColor({ light: '#2E7D32', dark: '#2E7D32' }, 'tint');
   const textColor = useThemeColor({ light: '#333333', dark: '#333333' }, 'text');
 
@@ -178,8 +182,8 @@ const NewsSection = ({ userLocation }: { userLocation: { city: string; state: st
     fetchNews();
   }, [userLocation.state]); // Re-fetch when user's state changes
 
-  const handleNewsPress = (url: string) => {
-    Linking.openURL(url);
+  const handleNewsCardIndex = (index: number) => {
+    setCurrentNewsIndex(index);
   };
 
   if (loading) {
@@ -190,51 +194,63 @@ const NewsSection = ({ userLocation }: { userLocation: { city: string; state: st
     );
   }
 
-  return (
-    <View style={styles.newsContainer}>
-      <View style={styles.sectionHeader}>
-        <FontAwesome name="newspaper-o" size={20} color="#2E7D32" />
-        <Text style={[styles.sectionTitle, { color: textColor }]}>
-          {isGeneralNews 
-            ? 'Latest News from India' 
-            : `Latest Farming News from ${userLocation.state}`
-          }
+  if (news.length === 0) {
+    return (
+      <View style={styles.newsContainer}>
+        <Text style={[styles.noNewsText, { color: textColor }]}>
+          No news available at the moment
         </Text>
       </View>
-      {news.map((item, index) => (
-        <TouchableOpacity
-          key={index}
-          style={[styles.newsCard, { backgroundColor: '#ffffff', borderColor: '#e0e0e0' }]}
-          onPress={() => handleNewsPress(item.url)}
-        >
-          {item.urlToImage && (
-            <Image
-              source={{ uri: item.urlToImage }}
-              style={styles.newsImage}
-              resizeMode="cover"
-            />
-          )}
-          <View style={styles.newsContent}>
-            <View style={styles.newsHeader}>
-              <Text style={[styles.newsTitle, { color: textColor }]} numberOfLines={2}>
-                {item.title}
-              </Text>
-              <View style={styles.newsSourceBadge}>
-                <Text style={styles.newsSourceText}>News</Text>
-              </View>
-            </View>
-            <Text style={[styles.newsDescription, { color: textColor }]} numberOfLines={3}>
-              {item.description}
-            </Text>
-            <View style={styles.newsFooter}>
-              <FontAwesome name="clock-o" size={12} color="#666" />
-              <Text style={styles.newsDate}>
-                {new Date(item.publishedAt).toLocaleDateString()}
-              </Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-      ))}
+    );
+  }
+
+  // Create header component
+  const headerComponent = (
+    <View style={styles.sectionHeader}>
+      <FontAwesome name="newspaper-o" size={20} color="#2E7D32" />
+      <Text style={[styles.sectionTitle, { color: textColor }]}>
+        {isGeneralNews 
+          ? 'Latest News from India' 
+          : `Latest Farming News from ${userLocation.state}`
+        }
+      </Text>
+      <Text style={styles.newsCounter}>
+        {currentNewsIndex + 1} / {news.length}
+      </Text>
+    </View>
+  );
+
+  // Create children array: [header, firstCard, ...restCards]
+  const stackChildren = [
+    headerComponent,
+    <NewsCard
+      key={0}
+      item={news[0]}
+      index={0}
+      textColor={textColor}
+      accentColor={accentColor}
+    />,
+    ...news.slice(1).map((item, idx) => (
+      <NewsCard
+        key={idx + 1}
+        item={item}
+        index={idx + 1}
+        textColor={textColor}
+        accentColor={accentColor}
+      />
+    )),
+  ];
+
+  return (
+    <View style={{ flex: 1 }}>
+      <StickyScrollStack
+        children={stackChildren as React.ReactNode[]}
+        cardHeight={380}
+        gap={16}
+        headerHeight={70}
+        firstCardHeight={380}
+        onCardIndex={handleNewsCardIndex}
+      />
     </View>
   );
 };
@@ -265,6 +281,7 @@ export default function HomeScreen() {
   const [weatherLoading, setWeatherLoading] = useState(false);
   const taskService = FirebaseTaskService.getInstance(); // Initialize task service
   const [showWeatherModal, setShowWeatherModal] = useState(false);
+  const [showWeatherVariables, setShowWeatherVariables] = useState(true);
 
   // Note: Real weather data is now fetched from WeatherService API
   // This mock function is kept for reference but not used
@@ -339,41 +356,45 @@ export default function HomeScreen() {
     };
   }, [selectedLanguage, isAssistantVisible]); // Add isAssistantVisible as dependency
 
-  // Fetch user profile data
-  useEffect(() => {
-    const fetchUserProfile = async () => {
-      try {
-        console.log('HomeScreen: Fetching user profile...');
-        if (auth.currentUser) {
-          console.log('HomeScreen: User is logged in, fetching profile...');
-          const userRef = doc(db, 'users', auth.currentUser.uid);
-          const userDoc = await getDoc(userRef);
-          
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            console.log('HomeScreen: User data from Firebase:', userData);
-            const location = {
-              city: userData.city || 'Pune',
-              state: userData.state || 'Maharashtra'
-            };
-            setUserLocation(location);
-            console.log('HomeScreen: User location set to:', location);
+  // Fetch user profile data on component mount and when screen is focused (to refresh after profile updates)
+  useFocusEffect(
+    useCallback(() => {
+      const fetchUserProfile = async () => {
+        try {
+          console.log('HomeScreen: Fetching user profile...');
+          const auth = getAuth();
+          const db = getDb();
+          if (auth?.currentUser && db) {
+            console.log('HomeScreen: User is logged in, fetching profile...');
+            const userRef = doc(db, 'users', auth.currentUser.uid);
+            const userDoc = await getDoc(userRef);
+            
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              console.log('HomeScreen: User data from Firebase:', userData);
+              const location = {
+                city: userData.city || 'Pune',
+                state: userData.state || 'Maharashtra'
+              };
+              setUserLocation(location);
+              console.log('HomeScreen: User location set to:', location);
+            } else {
+              console.log('HomeScreen: User document does not exist, using default location');
+              setUserLocation({ city: 'Pune', state: 'Maharashtra' });
+            }
           } else {
-            console.log('HomeScreen: User document does not exist, using default location');
+            console.log('HomeScreen: No user logged in, using default location');
             setUserLocation({ city: 'Pune', state: 'Maharashtra' });
           }
-        } else {
-          console.log('HomeScreen: No user logged in, using default location');
+        } catch (error) {
+          console.error('HomeScreen: Error fetching user profile:', error);
           setUserLocation({ city: 'Pune', state: 'Maharashtra' });
         }
-      } catch (error) {
-        console.error('HomeScreen: Error fetching user profile:', error);
-        setUserLocation({ city: 'Pune', state: 'Maharashtra' });
-      }
-    };
+      };
 
-    fetchUserProfile();
-  }, []);
+      fetchUserProfile();
+    }, [])
+  );
 
   // Fetch weather data when user location changes
   useEffect(() => {
@@ -476,134 +497,11 @@ export default function HomeScreen() {
         setHasIntroduced(true);
       }
 
-      const model = genAI.getGenerativeModel({ 
-        model: "gemini-1.5-flash",
-        systemInstruction: `You are a friendly and knowledgeable agricultural assistant for Smart Bharat, designed to help Indian farmers. Your responses should be:
-
-1. Natural and conversational - avoid robotic or formal language
-2. Focused on agriculture, farming, and rural development
-3. Helpful and practical - provide actionable advice when possible
-4. Culturally aware - use appropriate greetings and terms
-5. CRITICAL: ALWAYS respond in ${selectedLanguage.toUpperCase()} for ALL queries
-6. Keep responses concise - maximum 2-3 sentences for simple questions
-7. CRITICAL: Maintain exact context from previous messages for ALL types of queries
-8. For ANY follow-up question, provide more details about the EXACT SAME topic as the last message
-9. NEVER switch topics unless explicitly asked
-10. If the last message was about ANY topic, continue discussing that SAME topic
-11. CRITICAL: Remember the last topic discussed and maintain context throughout the conversation
-12. For ANY follow-up question, first understand what specific aspect of the previous topic is being asked about
-
-Task Handling Rules:
-- If the user's message is a request to add a task, reminder, or todo (in any language), respond ONLY with __TASK__: followed by the EXACT task description provided by the user.
-- Do NOT add any extra text, greetings, explanations, or additional information like time, date, or location unless explicitly mentioned by the user.
-- Only output __TASK__: and the task description exactly as the user provided it.
-- Do NOT add default values like "tomorrow morning", "next week", or any other time/date information unless the user specifically mentioned it.
-- The task description should be the user's exact words without any modifications or additions.
-- If the user's message is NOT a task, respond normally as per the other instructions.
-
-Introduction Rules:
-- ONLY introduce yourself on the VERY FIRST greeting of the conversation
-- If user has already greeted you before in this conversation, DO NOT introduce yourself again
-- If the conversation has history, continue naturally without introduction
-- Introduction should be in the selected language
-- Keep introduction short and clear
-- Include your name (Smart Bharat) and main purpose
-- Example introductions (ONLY for first greeting):
-  ${selectedLanguage === 'hindi' ? `
-  Hindi: "नमस्ते! मैं स्मार्ट भारत हूं, आपका कृषि सहायक। मैं किसानों को खेती, योजनाओं और कृषि से जुड़ी जानकारी देने में मदद करता हूं।"` : ''}
-  ${selectedLanguage === 'marathi' ? `
-  Marathi: "नमस्कार! मी स्मार्ट भारत आहे, तुमचा शेती सहाय्यक. मी शेतकऱ्यांना शेती, योजना आणि कृषी संबंधित माहिती देण्यात मदत करतो."` : ''}
-  ${selectedLanguage === 'punjabi' ? `
-  Punjabi: "ਸਤ ਸ੍ਰੀ ਅਕਾਲ! ਮੈਂ ਸਮਾਰਟ ਭਾਰਤ ਹਾਂ, ਤੁਹਾਡਾ ਖੇਤੀਬਾੜੀ ਸਹਾਇਕ. ਮੈਂ ਕਿਸਾਨਾਂ ਨੂੰ ਖੇਤੀਬਾੜੀ, ਯੋਜਨਾਵਾਂ ਅਤੇ ਖੇਤੀਬਾੜੀ ਸੰਬੰਧੀ ਜਾਣਕਾਰੀ ਦੇਣ ਵਿੱਚ ਮਦਦ ਕਰਦਾ ਹਾਂ."` : ''}
-  ${selectedLanguage === 'gujarati' ? `
-  Gujarati: "નમસ્તે! હું સ્માર્ટ ભારત છું, તમારો કૃષિ સહાયક. હું ખેડૂતોને ખેતી, યોજનાઓ અને કૃષિ સંબંધિત માહિતી આપવામાં મદਦ કરું છું."` : ''}
-  ${selectedLanguage === 'bengali' ? `
-  Bengali: "নমস্কার! আমি স্মার্ট ভারত, আপনার কৃষি সহায়ক. আমি কৃষকদের কৃষি, প্রকল্প এবং কৃষি সম্পর্কিত তথ্য প্রদান করতে সাহায্য করি."` : ''}
-  ${selectedLanguage === 'english' ? `
-  English: "Hello! I am Smart Bharat, your agricultural assistant. I help farmers with farming, schemes, and agricultural information."` : ''}
-  ${selectedLanguage === 'kannada' ? `
-  Kannada: "ನಮಸ್ಕಾರ! ನಾನು ಸ್ಮಾರ್ಟ್ ಭಾರತ, ನಿಮ್ಮ ಕೃಷಿ ಸಹಾಯಕ. ನಾನು ರೈತರಿಗೆ ಕೃಷಿ, ಯೋಜನೆಗಳು ಮತ್ತು ಕೃಷಿ ಸಂಬಂಧಿತ ಮಾಹಿತಿಯನ್ನು ನೀಡಲು ಸಹಾಯ ಮಾಡುತ್ತೇನೆ."` : ''}
-
-Context Retention Rules:
-- CRITICAL: ALWAYS maintain context from the previous message
-- If the last message was about a scheme (like PM-KISAN), continue discussing that scheme
-- If the last message was about crops, continue discussing those crops
-- If the last message was about farming techniques, continue discussing those techniques
-- If the last message was about weather, continue discussing weather
-- If the last message was about equipment, continue discussing that equipment
-- For ANY topic, remember the last discussed aspect and provide relevant follow-up information
-- NEVER ask for clarification about the previous topic unless absolutely necessary
-- ALWAYS assume the follow-up question is about the last discussed topic
-- If user mentions their location (like "मैं कोल्हापुर में रहता हूं"), remember this context
-- If user asks about specific crops (like "सोयाबीन"), continue discussing that crop
-- If user mentions weather conditions, relate it to farming advice
-
-Language Rules:
-- CRITICAL: You MUST respond in ${selectedLanguage.toUpperCase()} ONLY
-- NEVER mix languages in your response
-- Use proper grammar and vocabulary for ${selectedLanguage}
-- Use appropriate greetings for ${selectedLanguage}
-- Use proper numerals and currency symbols for ${selectedLanguage}
-- Use proper punctuation for ${selectedLanguage}
-- NEVER use any other language unless absolutely necessary (like scheme names)
-
-Language-Specific Instructions:
-${selectedLanguage === 'hindi' ? `
-For Hindi:
-- Use proper Hindi grammar and vocabulary
-- Use Hindi numerals (१, २, ३)
-- Use Hindi currency symbol (₹)
-- Use Hindi greetings (नमस्ते, प्रणाम)
-- Use Hindi punctuation` : ''}
-${selectedLanguage === 'marathi' ? `
-For Marathi:
-- Use proper Marathi grammar and vocabulary
-- Use Marathi numerals (१, २, ३)
-- Use Marathi currency symbol (₹)
-- Use Marathi greetings (नमस्कार, राम राम)
-- Use Marathi punctuation` : ''}
-${selectedLanguage === 'punjabi' ? `
-For Punjabi:
-- Use proper Punjabi grammar and vocabulary
-- Use Punjabi numerals (੧, ੨, ੩)
-- Use Punjabi currency symbol (₹)
-- Use Punjabi greetings (ਸਤ ਸ੍ਰੀ ਅਕਾਲ, ਫਿਰ ਮਿਲਾਂਗੇ)
-- Use Punjabi punctuation` : ''}
-${selectedLanguage === 'gujarati' ? `
-For Gujarati:
-- Use proper Gujarati grammar and vocabulary
-- Use Gujarati numerals (૧, ૨, ૩)
-- Use Gujarati currency symbol (₹)
-- Use Gujarati greetings (નમસ્તે, રામ રામ)
-- Use Gujarati punctuation` : ''}
-${selectedLanguage === 'bengali' ? `
-For Bengali:
-- Use proper Bengali grammar and vocabulary
-- Use Bengali numerals (১, ২, ৩)
-- Use Bengali currency symbol (₹)
-- Use Bengali greetings (নমস্কার, আসসালামু আলাইকুম)
-- Use Bengali punctuation` : ''}
-${selectedLanguage === 'english' ? `
-For English:
-- Use proper English grammar and vocabulary
-- Use English numerals (1, 2, 3)
-- Use English currency symbol ($)
-- Use English greetings (Hello, Hi)
-- Use English punctuation` : ''}
-${selectedLanguage === 'kannada' ? `
-For Kannada:
-- Use proper Kannada grammar and vocabulary
-- Use Kannada numerals (೧, ೨, ೩)
-- Use Kannada currency symbol (₹)
-- Use Kannada greetings (ನಮಸ್ಕಾರ, ರಾಮ ರಾಮ)
-- Use Kannada punctuation` : ''}
-
-Tone Instructions:
-Conciseness: Respond in short, informative sentences.
-Formality: Use polite language with slight formality.
-Clarity: Avoid technical jargon unless necessary.
-Consistency: Ensure responses are aligned in tone and style across all queries.`
-      });
+      // Get Gemini model with fallback support
+      const model = getGeminiModel(genAI);
+      if (!model) {
+        throw new Error('No Gemini model available');
+      }
       
       // Add user message to chat history
       const userMessage: ChatMessage = {
@@ -956,6 +854,9 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
             <View style={styles.weatherCardRain}>
               <View style={styles.weatherCardContent}>
                 <View style={styles.weatherCardLeft}>
+                  <Text style={styles.weatherCityName}>
+                    {userLocation.city}, {userLocation.state}
+                  </Text>
                   <Text style={styles.weatherDateRain}>
                     {weatherData?.location?.localtime
                       ? new Date(weatherData.location.localtime).toLocaleDateString('en-US', {
@@ -1289,12 +1190,21 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
 
                 {/* Weather Variables / Detailed Metrics */}
                 <View style={styles.weatherVariablesSection}>
-                  <View style={styles.weatherVariablesHeader}>
+                  <TouchableOpacity 
+                    style={styles.weatherVariablesHeader}
+                    onPress={() => setShowWeatherVariables(!showWeatherVariables)}
+                    activeOpacity={0.7}
+                  >
                     <Text style={styles.weatherVariablesTitle}>Weather Variables</Text>
-                    <FontAwesome name="chevron-down" size={16} color="#A78BFA" />
-                  </View>
+                    <FontAwesome 
+                      name={showWeatherVariables ? "chevron-up" : "chevron-down"} 
+                      size={16} 
+                      color="#A78BFA" 
+                    />
+                  </TouchableOpacity>
 
-                  <View style={styles.weatherDetailsGrid}>
+                  {showWeatherVariables && (
+                    <View style={styles.weatherDetailsGrid}>
                     <View style={styles.weatherDetailCard}>
                       <View style={styles.weatherDetailIconBox}>
                         <FontAwesome name="tint" size={20} color="#7C3AED" />
@@ -1355,6 +1265,7 @@ Consistency: Ensure responses are aligned in tone and style across all queries.`
                       </Text>
                     </View>
                   </View>
+                  )}
                 </View>
 
               </ScrollView>
@@ -2060,6 +1971,12 @@ const styles = StyleSheet.create({
   },
   weatherCardRight: {
     marginLeft: 10,
+  },
+  weatherCityName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#27ae60',
+    marginBottom: 8,
   },
   weatherDateRain: {
     fontSize: 14,
@@ -2798,9 +2715,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
-    paddingBottom: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+    backgroundColor: '#F5F3FF',
   },
   weatherVariablesTitle: {
     color: '#333333',
@@ -2862,5 +2783,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 5,
     textAlign: 'center',
+  },
+  newsStackContainer: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  noNewsText: {
+    fontSize: 16,
+    textAlign: 'center',
+    paddingVertical: 32,
+    fontStyle: 'italic',
+  },
+  newsCounter: {
+    marginLeft: 'auto',
+    fontSize: 13,
+    color: '#888',
+    fontWeight: '500',
   },
 });

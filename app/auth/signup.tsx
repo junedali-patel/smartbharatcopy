@@ -3,10 +3,9 @@ import { StyleSheet, View, Text, TextInput, TouchableOpacity, Alert, ActivityInd
 import { MaterialIcons } from '@expo/vector-icons';
 import { useThemeColor } from '../../hooks/useThemeColor';
 import { router } from 'expo-router';
-import { auth } from '../../services/firebase';
+import { getAuth, getDb } from '../../config/firebase';
 import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
-import { db } from '../../services/firebase';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -36,13 +35,23 @@ export default function SignupScreen() {
   const borderColor = '#e0e0e0';
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) {
-        router.replace('/(tabs)');
-      }
-    });
+    // Skip if Firebase Auth is not available
+    const authInstance = getAuth();
+    if (!authInstance || typeof authInstance.onAuthStateChanged !== 'function') {
+      return;
+    }
 
-    return unsubscribe;
+    try {
+      const unsubscribe = authInstance.onAuthStateChanged((user) => {
+        if (user) {
+          router.replace('/(tabs)');
+        }
+      });
+
+      return unsubscribe;
+    } catch (error) {
+      console.warn('Failed to setup auth listener:', error);
+    }
   }, []);
 
   useEffect(() => {
@@ -64,13 +73,20 @@ export default function SignupScreen() {
       return;
     }
 
+    const authInstance = getAuth();
+    const dbInstance = getDb();
+    if (!authInstance || !dbInstance) {
+      Alert.alert('Error', 'Firebase is not available. Please use a development build.');
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(authInstance, email, password);
       const user = userCredential.user;
 
       // Create user profile in Firestore
-      await setDoc(doc(db, 'users', user.uid), {
+      await setDoc(doc(dbInstance, 'users', user.uid), {
         name,
         email,
         createdAt: new Date().toISOString(),
@@ -88,13 +104,15 @@ export default function SignupScreen() {
   };
 
   const handleGoogleSignUp = async (credential: any) => {
+    const authInstance = getAuth();
+    const dbInstance = getDb();
     setIsLoading(true);
     try {
-      const result = await signInWithCredential(auth, credential);
+      const result = await signInWithCredential(authInstance, credential);
       const user = result.user;
 
       // Create user profile in Firestore if it doesn't exist
-      const userDoc = doc(db, 'users', user.uid);
+      const userDoc = doc(dbInstance, 'users', user.uid);
       await setDoc(userDoc, {
         name: user.displayName,
         email: user.email,

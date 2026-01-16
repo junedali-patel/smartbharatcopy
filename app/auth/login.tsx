@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, TextInput, TouchableOpacity, Alert, ActivityInd
 import { MaterialIcons } from '@expo/vector-icons';
 import { useThemeColor } from '../../hooks/useThemeColor';
 import { router } from 'expo-router';
-import { auth } from '../../services/firebase';
+import { getAuth } from '../../config/firebase';
 import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
@@ -30,13 +30,23 @@ export default function LoginScreen() {
   const borderColor = '#e0e0e0';
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) {
-        router.replace('/(tabs)');
-      }
-    });
+    // Skip if Firebase Auth is not available
+    const authInstance = getAuth();
+    if (!authInstance || typeof authInstance.onAuthStateChanged !== 'function') {
+      return;
+    }
 
-    return unsubscribe;
+    try {
+      const unsubscribe = authInstance.onAuthStateChanged((user) => {
+        if (user) {
+          router.replace('/(tabs)');
+        }
+      });
+
+      return unsubscribe;
+    } catch (error) {
+      console.warn('Failed to setup auth listener:', error);
+    }
   }, []);
 
   useEffect(() => {
@@ -53,9 +63,22 @@ export default function LoginScreen() {
       return;
     }
 
+    const authInstance = getAuth();
+    
+    // Demo mode for Expo Go - allow login without Firebase
+    if (!authInstance) {
+      console.log('Demo Mode: Logging in without Firebase (Expo Go)');
+      // Allow any email/password combination in demo mode
+      if (email && password) {
+        router.replace('/(tabs)');
+        Alert.alert('Demo Mode', 'Logged in successfully (Demo - no Firebase)');
+        return;
+      }
+    }
+
     setIsLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      await signInWithEmailAndPassword(authInstance, email, password);
       router.replace('/(tabs)');
     } catch (error: any) {
       Alert.alert('Error', error.message);
@@ -65,9 +88,15 @@ export default function LoginScreen() {
   };
 
   const handleGoogleSignIn = async (credential: any) => {
+    const authInstance = getAuth();
+    if (!authInstance) {
+      Alert.alert('Error', 'Firebase Auth is not available. Please use a development build.');
+      return;
+    }
+
     setIsLoading(true);
     try {
-      await signInWithCredential(auth, credential);
+      await signInWithCredential(authInstance, credential);
       router.replace('/(tabs)');
     } catch (error: any) {
       Alert.alert('Error', error.message);

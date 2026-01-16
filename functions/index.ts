@@ -20,6 +20,19 @@ interface TaskNotificationData {
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
+// Helper to try multiple models with fallback
+const getWorkingModel = (genAI: GoogleGenerativeAI) => {
+  const models = ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro'];
+  for (const modelName of models) {
+    try {
+      return genAI.getGenerativeModel({ model: modelName });
+    } catch (error) {
+      continue;
+    }
+  }
+  return genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+};
+
 export const geminiExplain = onCall(async (request) => {
   const { data } = request;
   
@@ -28,7 +41,7 @@ export const geminiExplain = onCall(async (request) => {
   }
 
   const prediction = data.prediction;
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = getWorkingModel(genAI);
 
   const prompt = `You are an agricultural expert assistant. A farmer has received a crop prediction: "${prediction}".
     

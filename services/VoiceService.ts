@@ -1,8 +1,17 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { GEMINI_API_KEY, isGeminiAvailable } from '../constants/config';
+import { GEMINI_API_KEY, isGeminiAvailable, getGeminiModel } from '../constants/config';
 import { Alert, Platform } from 'react-native';
 import * as Speech from 'expo-speech';
-import Voice from '@react-native-voice/voice';
+
+// Conditionally import Voice only on non-web platforms
+let Voice: any = null;
+if (Platform.OS !== 'web') {
+  try {
+    Voice = require('@react-native-voice/voice').default;
+  } catch (error) {
+    console.warn('Voice module not available:', error);
+  }
+}
 
 type SpeechResultCallback = (text: string) => void;
 type SpeechEndCallback = () => void;
@@ -94,6 +103,10 @@ class VoiceService {
   }
 
   private initializeVoice() {
+    if (!Voice) {
+      console.warn('Voice module not available on this platform');
+      return;
+    }
     Voice.onSpeechResults = (e) => {
       const text = e.value?.[0] || '';
       this.onSpeechResultCallback?.(text);
@@ -164,11 +177,15 @@ class VoiceService {
           const langCode = languageMap[this.currentLanguage] || 'en-US';
           
           // Configure voice recognition for shorter silence timeout
-          await Voice.start(langCode, {
-            EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS: 2000, // 2 seconds minimum
-            EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS: 1500, // 1.5 seconds silence to end
-            EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS: 1000, // 1 second for possible end
-          });
+          if (Voice) {
+            await Voice.start(langCode, {
+              EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS: 2000, // 2 seconds minimum
+              EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS: 1500, // 1.5 seconds silence to end
+              EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS: 1000, // 1 second for possible end
+            });
+          } else {
+            throw new Error('Voice module not available');
+          }
         }
         this.isListening = true;
       }
@@ -184,7 +201,9 @@ class VoiceService {
         if (Platform.OS === 'web') {
           this.recognition?.stop();
         } else {
-          await Voice.stop();
+          if (Voice) {
+            await Voice.stop();
+          }
         }
         this.isListening = false;
       }
@@ -325,7 +344,7 @@ class VoiceService {
         return 'I apologize, but I am currently unable to assist you. Please try again later.';
       }
 
-      const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const model = getGeminiModel(this.genAI);
       const prompt = `You are a friendly and knowledgeable agricultural assistant for Smart Bharat, designed to help Indian farmers. Your responses should be:
 
 1. Natural and conversational - avoid robotic or formal language

@@ -22,6 +22,11 @@ export function useGoogleAuth() {
 
   const signInWithGoogle = async () => {
     try {
+      if (!auth) {
+        setError('Firebase Auth is not available. Please use a development build.');
+        return;
+      }
+
       setLoading(true);
       setError(null);
 

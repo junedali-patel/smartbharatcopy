@@ -7,7 +7,7 @@ import schemesData from '../../constants/schemes.json';
 import { router, useLocalSearchParams } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { GEMINI_API_KEY, isGeminiAvailable } from '../../constants/config';
+import { GEMINI_API_KEY, isGeminiAvailable, getGeminiModel } from '../../constants/config';
 
 // Initialize Gemini API
 const genAI = isGeminiAvailable() ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
@@ -123,7 +123,7 @@ export default function SchemesScreen() {
 
   const getGeminiResponse = async (schemeName: string, type: 'eligibility' | 'benefits' | 'documents') => {
     try {
-      const model = genAI?.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const model = getGeminiModel(genAI);
       const prompt = `You are a government schemes expert. For the Indian government scheme "${schemeName}", provide a detailed list of ${type}. The response should be well-researched and accurate. Return only a JSON array of strings, with each item being detailed and specific. Do not include any markdown formatting or code blocks. Example format: ["Detailed item 1","Detailed item 2","Detailed item 3"]`;
       
       const result = await model?.generateContent({
@@ -225,7 +225,7 @@ export default function SchemesScreen() {
     } else {
       // If no apply link is available, try to get it from Gemini
       try {
-        const model = genAI?.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = getGeminiModel(genAI);
         const prompt = `You are a government schemes expert. For the Indian government scheme "${scheme.name}", provide only the official application website URL. Return only the URL without any additional text, quotes, or formatting.`;
         
         const result = await model?.generateContent({
@@ -598,61 +598,84 @@ const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
   },
   modalContent: {
     flex: 1,
-    marginTop: 50,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    marginTop: 40,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     overflow: 'hidden',
+    paddingBottom: 20,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    paddingVertical: 20,
+    paddingHorizontal: 24,
     borderBottomWidth: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '700',
+    letterSpacing: -0.5,
   },
   modalBody: {
     flex: 1,
-    padding: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
   },
   detailTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 26,
+    fontWeight: '800',
     marginBottom: 8,
+    letterSpacing: -0.5,
   },
   detailCategory: {
-    fontSize: 16,
-    opacity: 0.8,
-    marginBottom: 20,
+    fontSize: 15,
+    opacity: 0.7,
+    marginBottom: 24,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   detailSection: {
-    marginBottom: 24,
+    marginBottom: 28,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.08)',
   },
   detailSectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 12,
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 14,
+    letterSpacing: -0.3,
   },
   detailText: {
-    fontSize: 16,
-    lineHeight: 24,
-    marginBottom: 8,
+    fontSize: 15,
+    lineHeight: 26,
+    marginBottom: 10,
+    fontWeight: '500',
   },
   applyButton: {
-    padding: 16,
-    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 14,
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 24,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
   },
   applyButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: -0.3,
   },
 });

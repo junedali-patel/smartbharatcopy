@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal, StyleSheet, Text, TouchableOpacity, View, ScrollView, Image, Pressable, Dimensions, Linking, Alert, TextInput, SafeAreaView } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { collection, getDocs, addDoc, serverTimestamp, doc, deleteDoc, updateDoc } from 'firebase/firestore';
-import { db, auth } from '../services/firebase';
+import { getDb, getAuth } from '../config/firebase';
 import AddServiceForm from './AddServiceForm';
 import { useAuth } from '../contexts/AuthContext';
 // Theme colors
@@ -62,7 +62,7 @@ export default function FarmerServicesModal({ visible, onClose }: FarmerServices
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info', message: string } | null>(null);
   const [confirmBooking, setConfirmBooking] = useState<ServiceProvider | null>(null);
   const [bookedProviderIds, setBookedProviderIds] = useState<string[]>([]);
-  const user = auth.currentUser;
+  const user = getAuth()?.currentUser ?? null;
   
   const backgroundColor = colors.background;
   const textColor = colors.text;
@@ -76,7 +76,7 @@ export default function FarmerServicesModal({ visible, onClose }: FarmerServices
   const fetchServices = () => {
     setLoading(true);
     const grouped: { [type: string]: ServiceItem } = {};
-    getDocs(collection(db, 'services')).then(snapshot => {
+    getDocs(collection(getDb(), 'services')).then(snapshot => {
       snapshot.forEach(doc => {
         const data = doc.data();
         const type = data.type || 'Other';
@@ -109,7 +109,7 @@ export default function FarmerServicesModal({ visible, onClose }: FarmerServices
   const fetchMyListings = () => {
     if (!user) return;
     setLoading(true);
-    getDocs(collection(db, 'services')).then(snapshot => {
+    getDocs(collection(getDb(), 'services')).then(snapshot => {
       const grouped: { [type: string]: ServiceItem } = {};
       snapshot.forEach(doc => {
         const data = doc.data();
@@ -145,7 +145,7 @@ export default function FarmerServicesModal({ visible, onClose }: FarmerServices
   const fetchMyBookings = () => {
     if (!user) return;
     setLoading(true);
-    getDocs(collection(db, 'bookings')).then(snapshot => {
+    getDocs(collection(getDb(), 'bookings')).then(snapshot => {
       const bookings: any[] = [];
       snapshot.forEach(doc => {
         const data = doc.data();
@@ -161,7 +161,7 @@ export default function FarmerServicesModal({ visible, onClose }: FarmerServices
   const fetchProviderBookings = () => {
     if (!user) return;
     setLoading(true);
-    getDocs(collection(db, 'bookings')).then(snapshot => {
+    getDocs(collection(getDb(), 'bookings')).then(snapshot => {
       const bookings: any[] = [];
       snapshot.forEach(doc => {
         const data = doc.data();
@@ -175,7 +175,7 @@ export default function FarmerServicesModal({ visible, onClose }: FarmerServices
   };
 
   const fetchProviderReviews = async (providerId: string) => {
-    const snapshot = await getDocs(collection(db, 'reviews'));
+    const snapshot = await getDocs(collection(getDb(), 'reviews'));
     const reviews = snapshot.docs.filter(doc => doc.data().providerId === providerId).map(doc => doc.data());
     setProviderReviews(prev => ({ ...prev, [providerId]: reviews }));
     if (reviews.length > 0) {
@@ -187,7 +187,7 @@ export default function FarmerServicesModal({ visible, onClose }: FarmerServices
   const handleSubmitReview = async () => {
     if (!reviewModal) return;
     try {
-      await addDoc(collection(db, 'reviews'), {
+      await addDoc(collection(getDb(), 'reviews'), {
         bookingId: reviewModal.booking.id,
         providerId: reviewModal.booking.providerId,
         renterId: user?.uid,
@@ -209,7 +209,7 @@ export default function FarmerServicesModal({ visible, onClose }: FarmerServices
 
   const handleUpdateBookingStatus = async (booking: any, status: string) => {
     try {
-      await updateDoc(doc(db, 'bookings', booking.id), { status });
+      await updateDoc(doc(getDb(), 'bookings', booking.id), { status });
       fetchProviderBookings();
       setFeedback({ type: 'success', message: `Booking marked as ${status}.` });
       setTimeout(() => setFeedback(null), 3000);
@@ -250,13 +250,13 @@ export default function FarmerServicesModal({ visible, onClose }: FarmerServices
 
   const handleBook = async (provider: ServiceProvider) => {
     try {
-      const user = auth.currentUser;
-      if (!user) {
+      const user = getAuth()?.currentUser;
+      if (!user || !getDb()) {
         setFeedback({ type: 'error', message: 'Login required. Please log in to book a service.' });
         setTimeout(() => setFeedback(null), 3000);
         return;
       }
-      await addDoc(collection(db, 'bookings'), {
+      await addDoc(collection(getDb(), 'bookings'), {
         serviceId: selectedService?.id,
         providerId: provider.id,
         providerName: provider.name,
