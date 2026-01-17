@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, ScrollView, ActivityIndicator, Alert, Platform, Linking } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { BACKEND_BASE_URL, GEMINI_API_KEY } from '../constants/config';
+import { GEMINI_API_KEY } from '../constants/config';
 
-// Hugging Face Inference API URLs for plant disease detection
-const HF_API_URL = 'https://api-inference.huggingface.co/models/linkanjarad/mobilenet_v2_1.0_224-plant-disease-identification';
-const HF_API_URL_FALLBACK = 'https://api-inference.huggingface.co/models/PlantNet/plantnet-300k';
+// FastAPI backend endpoint for plant disease detection
+// Make sure FastAPI is running: uvicorn main:app --host 0.0.0.0 --port 8000
+const FASTAPI_BASE_URL = __DEV__ 
+  ? 'http://10.1.44.253:8000' // Your PC's LAN IP - change this to your actual PC IP
+  : 'http://10.1.44.253:8000';
 
 interface CropDiseaseModalProps {
   visible: boolean;
@@ -75,18 +77,17 @@ const imageToBase64 = async (imageUri: string): Promise<string> => {
   }
 };
 
-// Function to predict disease using local FastAPI backend (PyTorch + transformers)
-// On native: image is a URI string
-// On web: image is a File object from an <input type="file">
+// Function to predict disease using local FastAPI backend
+// Works on Expo Go when FastAPI is running on same network
 const predictDiseaseFromHF = async (image: any): Promise<{ disease: string; confidence: number }> => {
   try {
     const formData = new FormData();
 
     if (Platform.OS === 'web') {
-      // Web: append the actual File object
+      // Web: append the File object directly
       formData.append('file', image);
     } else {
-      // Native: append React Native file descriptor
+      // Native (Expo Go): append React Native file descriptor
       formData.append('file', {
         uri: image as string,
         name: 'crop.jpg',
@@ -94,7 +95,9 @@ const predictDiseaseFromHF = async (image: any): Promise<{ disease: string; conf
       } as any);
     }
 
-    const response = await fetch(`${BACKEND_BASE_URL}/predict`, {
+    console.log(`Sending disease prediction request to: ${FASTAPI_BASE_URL}/predict`);
+
+    const response = await fetch(`${FASTAPI_BASE_URL}/predict`, {
       method: 'POST',
       body: formData,
     });
@@ -102,7 +105,7 @@ const predictDiseaseFromHF = async (image: any): Promise<{ disease: string; conf
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `Backend error (${response.status}): ${errorText.substring(0, 200)}`
+        `Backend error (${response.status}): ${errorText}`
       );
     }
 
@@ -112,10 +115,11 @@ const predictDiseaseFromHF = async (image: any): Promise<{ disease: string; conf
 
     return {
       disease: diseaseLabel,
-      confidence: confidencePct / 100,
+      confidence: confidencePct / 100, // Convert percentage to decimal
     };
   } catch (error: any) {
-    throw new Error(`Disease detection failed: ${error.message || 'Service unavailable'}`);
+    console.error('Disease prediction error:', error);
+    throw new Error(`Disease detection failed: ${error.message || 'Service unavailable. Make sure FastAPI backend is running on your network.'}`);
   }
 };
 
@@ -138,7 +142,7 @@ const getGeminiDiseaseInfo = async (diseaseLabel: string) => {
     await new Promise(resolve => setTimeout(resolve, GEMINI_REQUEST_DELAY - timeSinceLastRequest));
   }
 
-  const apiKey = 'AIzaSyATFG-N_HT4IFm8SHGLnlAFtH_7fzqB_j0';
+  const apiKey = 'AIzaSyDaLIkmG8V1E1synWS1xkD_bCy8eni7Wj4';
   const prompt = `Write a detailed, structured response about the plant disease "${diseaseLabel}" in this format:
 
 ABOUT:
@@ -150,10 +154,10 @@ CAUSE:
 SOLUTION:
 [Provide treatment and prevention, include at least 2 relevant links]`;
 
-  // Try gemini-pro first, fallback to gemini-1.5-pro if needed
-  let modelName = 'gemini-pro';
+  // Try gemini-3-flash-preview first, fallback to gemini-2.0-flash if needed
+  let modelName = 'gemini-3-flash-preview';
   let response = await fetch(
-    `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -163,11 +167,11 @@ SOLUTION:
     }
   );
 
-  // If gemini-pro fails, try gemini-1.5-pro
+  // If gemini-3-flash-preview fails, try gemini-2.0-flash
   if (!response.ok && response.status === 404) {
-    modelName = 'gemini-1.5-pro';
+    modelName = 'gemini-2.0-flash';
     response = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

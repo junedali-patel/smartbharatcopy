@@ -18,7 +18,7 @@ interface TaskNotificationData {
   userId: string;
 }
 
-const genAI = new GoogleGenerativeAI('AIzaSyATFG-N_HT4IFm8SHGLnlAFtH_7fzqB_j0');
+const genAI = new GoogleGenerativeAI('AIzaSyDaLIkmG8V1E1synWS1xkD_bCy8eni7Wj4');
 
 // Helper to try multiple models with fallback
 const getWorkingModel = (genAI: GoogleGenerativeAI) => {

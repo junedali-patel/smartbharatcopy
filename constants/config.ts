@@ -1,5 +1,5 @@
 // Hardcoded Gemini API key for Smart Bharat app
-export const GEMINI_API_KEY = 'AIzaSyATFG-N_HT4IFm8SHGLnlAFtH_7fzqB_j0';
+export const GEMINI_API_KEY = 'AIzaSyDaLIkmG8V1E1synWS1xkD_bCy8eni7Wj4';
 
 // List of Gemini models to try in order (fallback chain)
 export const GEMINI_MODELS = [
@@ -33,9 +33,8 @@ export const getGeminiModel = (genAI: any) => {
   return genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
 };
 
-// Base URL of the FastAPI backend serving the local plant disease model.
-// For web/localhost development, use localhost:8000
-// For real devices/mobile, replace with your PC's LAN IP (e.g., 192.168.1.X:8000)
-export const BACKEND_BASE_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
-  ? 'http://localhost:8000' 
-  : 'http://192.168.1.3:8000';
+// FastAPI Backend Configuration
+// Make sure your FastAPI backend is running with:
+// uvicorn main:app --host 0.0.0.0 --port 8000
+// Replace 192.168.1.X with your PC's actual LAN IP address
+export const BACKEND_BASE_URL = 'http://10.1.44.253:8000'; // Change to your PC's LAN IP

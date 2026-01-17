@@ -10,7 +10,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { isGeminiAvailable, getGeminiModel } from '../../constants/config';
 
 // Initialize Gemini API
-const GEMINI_API_KEY = 'AIzaSyATFG-N_HT4IFm8SHGLnlAFtH_7fzqB_j0';
+const GEMINI_API_KEY = 'AIzaSyDaLIkmG8V1E1synWS1xkD_bCy8eni7Wj4';
 const genAI = isGeminiAvailable() ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
 
 interface Scheme {

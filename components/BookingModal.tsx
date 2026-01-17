@@ -45,6 +45,9 @@ export default function BookingModal({
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [loading, setLoading] = useState(false);
   const [renterName, setRenterName] = useState<string>('User');
+  const [showStartCalendar, setShowStartCalendar] = useState(false);
+  const [showEndCalendar, setShowEndCalendar] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
   const auth = getAuth();
   const currentUser = auth?.currentUser;
 
@@ -77,12 +80,14 @@ export default function BookingModal({
       if (endDate && date >= endDate) {
         setEndDate(null);
       }
+      setShowStartCalendar(false);
     } else {
       if (startDate && date <= startDate) {
         Alert.alert('Invalid Date', 'End date must be after start date');
         return;
       }
       setEndDate(date);
+      setShowEndCalendar(false);
     }
   };
 
@@ -101,7 +106,12 @@ export default function BookingModal({
   };
 
   const handleBooking = async () => {
-    if (!startDate || !endDate || !equipment || !currentUser || !ownerDetails) {
+    if (!currentUser) {
+      Alert.alert('Login Required', 'Please log in to book equipment');
+      return;
+    }
+
+    if (!startDate || !endDate || !equipment || !ownerDetails) {
       Alert.alert('Invalid Booking', 'Please select both start and end dates');
       return;
     }
@@ -227,47 +237,71 @@ export default function BookingModal({
               </View>
             </View>
 
-            {/* Date Selection */}
+            {/* Date Selection with Calendar */}
             <View style={styles.section}>
               <BodyText style={{ fontWeight: '600', marginBottom: 12, color: Colors.text.primary }}>
                 SELECT DATES
               </BodyText>
 
-              <View style={styles.dateInputContainer}>
-                <TouchableOpacity
-                  style={[styles.dateInput, startDate && styles.dateInputActive]}
-                  onPress={() => {
-                    const today = new Date();
-                    handleDateSelect(today, true);
-                  }}
-                >
-                  <MaterialIcons name="calendar-today" size={20} color={Colors.primary} />
-                  <Text style={styles.dateText}>
-                    {startDate ? startDate.toLocaleDateString() : 'Start Date'}
-                  </Text>
-                </TouchableOpacity>
+              {/* Start Date Picker */}
+              <TouchableOpacity
+                style={[styles.dateInput, startDate && styles.dateInputActive]}
+                onPress={() => setShowStartCalendar(!showStartCalendar)}
+              >
+                <MaterialIcons name="calendar-today" size={20} color={Colors.primary} />
+                <Text style={styles.dateText}>
+                  {startDate ? startDate.toLocaleDateString() : 'Start Date'}
+                </Text>
+              </TouchableOpacity>
 
-                <View style={styles.dateArrow}>
-                  <MaterialIcons name="arrow-forward" size={18} color={Colors.text.tertiary} />
+              {showStartCalendar && (
+                <View style={styles.calendarContainer}>
+                  <View style={styles.calendarHeader}>
+                    <TouchableOpacity onPress={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1))}>
+                      <MaterialIcons name="chevron-left" size={24} color={Colors.primary} />
+                    </TouchableOpacity>
+                    <Text style={styles.calendarMonthText}>
+                      {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                    </Text>
+                    <TouchableOpacity onPress={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1))}>
+                      <MaterialIcons name="chevron-right" size={24} color={Colors.primary} />
+                    </TouchableOpacity>
+                  </View>
+                  <CalendarGrid month={calendarMonth} onSelectDate={(date) => handleDateSelect(date, true)} minDate={new Date()} />
                 </View>
+              )}
 
-                <TouchableOpacity
-                  style={[styles.dateInput, endDate && styles.dateInputActive]}
-                  onPress={() => {
-                    if (startDate) {
-                      const tomorrow = new Date();
-                      tomorrow.setDate(tomorrow.getDate() + 1);
-                      handleDateSelect(tomorrow, false);
-                    }
-                  }}
-                  disabled={!startDate}
-                >
-                  <MaterialIcons name="calendar-today" size={20} color={Colors.primary} />
-                  <Text style={styles.dateText}>
-                    {endDate ? endDate.toLocaleDateString() : 'End Date'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              {startDate && (
+                <View style={{ marginTop: 12 }}>
+                  {/* End Date Picker */}
+                  <TouchableOpacity
+                    style={[styles.dateInput, endDate && styles.dateInputActive]}
+                    onPress={() => setShowEndCalendar(!showEndCalendar)}
+                  >
+                    <MaterialIcons name="calendar-today" size={20} color={Colors.primary} />
+                    <Text style={styles.dateText}>
+                      {endDate ? endDate.toLocaleDateString() : 'End Date'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {showEndCalendar && (
+                    <View style={styles.calendarContainer}>
+                      <View style={styles.calendarHeader}>
+                        <TouchableOpacity onPress={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1))}>
+                          <MaterialIcons name="chevron-left" size={24} color={Colors.primary} />
+                        </TouchableOpacity>
+                        <Text style={styles.calendarMonthText}>
+                          {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                        </Text>
+                        <TouchableOpacity onPress={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1))}>
+                          <MaterialIcons name="chevron-right" size={24} color={Colors.primary} />
+                        </TouchableOpacity>
+                      </View>
+                      <CalendarGrid month={calendarMonth} onSelectDate={(date) => handleDateSelect(date, false)} minDate={startDate} />
+                    </View>
+                  )}
+                </View>
+              )}
             </View>
 
             {/* Booking Summary */}
@@ -334,13 +368,18 @@ export default function BookingModal({
             <TouchableOpacity
               style={[
                 styles.bookingBtn,
-                (!startDate || !endDate || loading) && styles.bookingBtnDisabled,
+                (!startDate || !endDate || loading || !currentUser) && styles.bookingBtnDisabled,
               ]}
               onPress={handleBooking}
-              disabled={!startDate || !endDate || loading}
+              disabled={!startDate || !endDate || loading || !currentUser}
             >
               {loading ? (
                 <ActivityIndicator color="#fff" />
+              ) : !currentUser ? (
+                <>
+                  <MaterialIcons name="lock" size={18} color="#fff" />
+                  <Text style={styles.bookingBtnText}>Login to Book</Text>
+                </>
               ) : (
                 <>
                   <MaterialIcons name="check-circle" size={18} color="#fff" />
@@ -513,4 +552,119 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
   },
+  calendarContainer: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#f9fafb',
+    borderRadius: BorderRadius.default,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  calendarMonthText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text.primary,
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  dayHeaderCell: {
+    width: '14.28%',
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  dayHeaderText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.text.tertiary,
+  },
+  dayCell: {
+    width: '14.28%',
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  dayButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#e5e7eb',
+  },
+  dayButtonActive: {
+    backgroundColor: Colors.primary,
+  },
+  dayButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: Colors.text.primary,
+  },
+  dayButtonTextActive: {
+    color: '#fff',
+  },
+  dayButtonDisabled: {
+    opacity: 0.3,
+  },
 });
+
+// Calendar Grid Component
+function CalendarGrid({ month, onSelectDate, minDate }: { month: Date; onSelectDate: (date: Date) => void; minDate: Date }) {
+  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+  const firstDayOfMonth = new Date(month.getFullYear(), month.getMonth(), 1).getDay();
+  
+  const days = [];
+  for (let i = 0; i < firstDayOfMonth; i++) {
+    days.push(null);
+  }
+  for (let i = 1; i <= daysInMonth; i++) {
+    days.push(new Date(month.getFullYear(), month.getMonth(), i));
+  }
+
+  const dayHeaders = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  return (
+    <View>
+      <View style={StyleSheet.create({ grid: { flexDirection: 'row', justifyContent: 'space-between' } }).grid}>
+        {dayHeaders.map((day) => (
+          <View key={day} style={[styles.dayHeaderCell]}>
+            <Text style={styles.dayHeaderText}>{day}</Text>
+          </View>
+        ))}
+      </View>
+      <View style={[styles.calendarGrid]}>
+        {days.map((day, index) => (
+          <View key={index} style={styles.dayCell}>
+            {day ? (
+              <TouchableOpacity
+                style={[
+                  styles.dayButton,
+                  day >= minDate && styles.dayButtonActive,
+                  day < minDate && styles.dayButtonDisabled,
+                ]}
+                onPress={() => day >= minDate && onSelectDate(day)}
+                disabled={day < minDate}
+              >
+                <Text
+                  style={[
+                    styles.dayButtonText,
+                    day >= minDate && styles.dayButtonTextActive,
+                  ]}
+                >
+                  {day.getDate()}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}

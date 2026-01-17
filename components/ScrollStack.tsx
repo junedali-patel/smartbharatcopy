@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: '100%',
-    pointerEvents: 'none',
+    pointerEvents: 'none' as const,
   },
 });
 

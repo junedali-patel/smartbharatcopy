@@ -24,6 +24,7 @@ import BookingModal from '../../components/BookingModal';
 import bookingService from '../../services/bookingService';
 import { getAuth, getDb } from '../../config/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { getCategoryImage, getCategoryIcon } from '../../utils/categoryImages';
 
 export default function RentScreen() {
   const [equipment, setEquipment] = useState<Equipment[]>([]);
@@ -39,6 +40,8 @@ export default function RentScreen() {
   const [bookingRequests, setBookingRequests] = useState<any[]>([]);
   const [processingBooking, setProcessingBooking] = useState<string | null>(null);
   const [acceptedBookings, setAcceptedBookings] = useState<any[]>([]);
+  const [deletingEquipment, setDeletingEquipment] = useState<string | null>(null);
+  const [userCity, setUserCity] = useState<string | null>(null);
 
   const auth = getAuth();
   const currentUser = auth?.currentUser;
@@ -125,6 +128,29 @@ export default function RentScreen() {
       console.error('Error setting up user bookings listener:', error);
     }
 
+    // Listener for user's own equipment
+    try {
+      const myEquipmentQuery = query(
+        collection(db, 'equipment'),
+        where('userId', '==', currentUser.uid)
+      );
+      const unsubMyEquipment = onSnapshot(myEquipmentQuery, (snapshot) => {
+        const userEquipment: Equipment[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          userEquipment.push({
+            id: doc.id,
+            ...data,
+            createdAt: data.createdAt?.toDate?.() || data.createdAt,
+          } as Equipment);
+        });
+        setMyEquipment(userEquipment);
+      });
+      unsubscribers.push(unsubMyEquipment);
+    } catch (error) {
+      console.error('Error setting up my equipment listener:', error);
+    }
+
     // Cleanup listeners on unmount
     return () => {
       unsubscribers.forEach(unsub => unsub?.());
@@ -152,7 +178,26 @@ export default function RentScreen() {
     } catch (error) {
       console.error('Error setting up equipment listener:', error);
     }
+
+    // Fetch user profile for city
+    fetchUserProfile();
   }, []);
+
+  const fetchUserProfile = async () => {
+    try {
+      if (!currentUser) return;
+      const userService = require('../../services/userService').default;
+      const profile = await userService.getInstance().getUserProfile();
+      if (profile?.city) {
+        console.log('User city from profile:', profile.city);
+        setUserCity(profile.city);
+      } else {
+        console.log('No city found in user profile:', profile);
+      }
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+    }
+  };
 
   const fetchMyEquipment = async () => {
     try {
@@ -208,6 +253,7 @@ export default function RentScreen() {
       setLoading(true);
       setError(null);
       const data = await equipmentService.getAllEquipment();
+      console.log('Equipment fetched:', data.map(e => ({ id: e.id, city: e.city, state: e.state, name: e.name })));
       setEquipment(data.sort((a, b) => {
         // Sort by status: Available first, then Rented, then Maintenance
         const statusOrder = { 'Available': 0, 'Rented': 1, 'Maintenance': 2 };
@@ -234,6 +280,16 @@ export default function RentScreen() {
     } else {
       Alert.alert('Notification', message);
     }
+  };
+
+  const calculateTotalEarnings = () => {
+    return acceptedBookings.reduce((total: number, booking: any) => {
+      if (!booking.equipment || !booking.startDate || !booking.endDate) return total;
+      const days = Math.ceil((new Date(booking.endDate).getTime() - new Date(booking.startDate).getTime()) / (1000 * 60 * 60 * 24));
+      const equipmentItem = myEquipment.find(e => e.id === booking.equipmentId);
+      const rate = equipmentItem?.dailyRate || 0;
+      return total + (days * rate);
+    }, 0);
   };
 
   const handleAcceptBooking = async (bookingId: string, equipmentId: string) => {
@@ -278,6 +334,44 @@ export default function RentScreen() {
     );
   };
 
+  // Filter equipment by user's city for browse mode
+  const filteredEquipment = userCity 
+    ? equipment.filter(item => {
+        // Normalize city names for comparison (case-insensitive, trim whitespace)
+        const userCityNormalized = userCity.toLowerCase().trim();
+        const itemCityNormalized = (item.city || '').toLowerCase().trim();
+        const itemStateNormalized = (item.state || '').toLowerCase().trim();
+        
+        console.log(`Comparing: userCity="${userCityNormalized}" with item.city="${itemCityNormalized}" and item.state="${itemStateNormalized}"`);
+        
+        // Match by city or state field (but NOT if state is from a different city's state)
+        const cityMatch = itemCityNormalized === userCityNormalized;
+        const stateMatch = itemStateNormalized === userCityNormalized;
+        
+        return cityMatch || stateMatch;
+      })
+    : equipment;
+
+  const handleDeleteEquipment = async (equipmentId: string) => {
+    try {
+      console.log('Deleting:', equipmentId);
+      
+      // Call delete API
+      await equipmentService.deleteEquipment(equipmentId);
+      console.log('✅ Deleted from Firestore');
+      
+      // Remove from myEquipment
+      setMyEquipment(prev => prev.filter(e => e.id !== equipmentId));
+      
+      // Remove from equipment
+      setEquipment(prev => prev.filter(e => e.id !== equipmentId));
+      
+      console.log('✅ Removed from UI');
+    } catch (error: any) {
+      console.error('Error:', error?.message);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Available':
@@ -296,6 +390,13 @@ export default function RentScreen() {
   const availableEquipment = equipment.filter(e => e.status === 'Available').length;
 
   const handleBookEquipment = (equipment: Equipment) => {
+    if (!currentUser) {
+      Alert.alert('Login Required', 'Please log in to book equipment', [
+        { text: 'Cancel', onPress: () => {} },
+        { text: 'Go to Login', onPress: () => router.push('/auth/login') },
+      ]);
+      return;
+    }
     setSelectedEquipment(equipment);
     setShowBookingModal(true);
   };
@@ -416,19 +517,19 @@ export default function RentScreen() {
             {/* Equipment List */}
             <View style={styles.listHeader}>
               <Heading2 style={{ color: Colors.text.primary }}>All Equipment</Heading2>
-              <BodyText style={{ color: Colors.text.tertiary }}>({equipment.length})</BodyText>
-              {equipment.length > 0 && (
+              <BodyText style={{ color: Colors.text.tertiary }}>({filteredEquipment.length})</BodyText>
+              {filteredEquipment.length > 0 && (
                 <TouchableOpacity onPress={handleRefresh} style={{ marginLeft: 'auto' }}>
                   <MaterialIcons name="refresh" size={24} color={Colors.primary} />
                 </TouchableOpacity>
               )}
             </View>
 
-        {equipment.length === 0 ? (
+        {filteredEquipment.length === 0 ? (
           <View style={styles.emptyContainer}>
             <MaterialIcons name="agriculture" size={48} color={Colors.text.tertiary} />
             <BodyText style={{ marginTop: 12, color: Colors.text.secondary }}>
-              No equipment available
+              No equipment available in your city
             </BodyText>
             <BodyText style={{ marginTop: 4, color: Colors.text.tertiary, fontSize: 12 }}>
               Check back soon for new listings
@@ -436,7 +537,7 @@ export default function RentScreen() {
           </View>
         ) : (
           <View style={{ gap: 12 }}>
-            {equipment.map((item) => {
+            {filteredEquipment.map((item) => {
               const statusColor = getStatusColor(item.status);
               return (
                 <StyledCard
@@ -452,17 +553,11 @@ export default function RentScreen() {
                   <View style={{ flexDirection: 'row', gap: 12 }}>
                     {/* Equipment Image Placeholder */}
                     <View style={[styles.equipmentImage, item.status === 'Maintenance' && { opacity: 0.6 }]}>
-                      <View style={styles.imagePlaceholder}>
-                        <MaterialIcons
-                          name={
-                            item.category === 'Tractor' ? 'agriculture' :
-                            item.category === 'Harvester' ? 'handyman' :
-                            item.category === 'Sprayer' ? 'water-drop' : 'construction'
-                          }
-                          size={32}
-                          color={Colors.primary}
-                        />
-                      </View>
+                      <Image
+                        source={getCategoryImage(item.category)}
+                        style={[styles.imagePlaceholder, { borderRadius: 8 }]}
+                        resizeMode="cover"
+                      />
                       <View style={[styles.statusBadge, { backgroundColor: statusColor.bg }]}>
                         <Text style={[styles.statusBadgeText, { color: statusColor.text }]}>{item.status}</Text>
                       </View>
@@ -548,6 +643,33 @@ export default function RentScreen() {
         {/* My Listings Mode Content */}
         {viewMode === 'myListings' && (
           <>
+            {/* Earnings Card */}
+            <View style={[styles.statsCard, { marginBottom: 16 }]}>
+              <View style={styles.statsTop}>
+                <View>
+                  <BodyText style={styles.statsLabel}>Total Earnings</BodyText>
+                  <Heading1 style={{ color: '#fff', marginTop: 4 }}>{`₹${calculateTotalEarnings().toLocaleString()}`}</Heading1>
+                </View>
+                <View style={styles.statsIcon}>
+                  <MaterialIcons name="attach-money" size={32} color="#fff" />
+                </View>
+              </View>
+
+              <View style={styles.statsDivider} />
+
+              <View style={styles.statsBottom}>
+                <View style={styles.statItem}>
+                  <BodyText style={styles.statsSmallLabel}>Active Bookings</BodyText>
+                  <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', marginTop: 4 }}>{acceptedBookings.length}</Text>
+                </View>
+                <View style={styles.statsVerticalDivider} />
+                <View style={styles.statItem}>
+                  <BodyText style={styles.statsSmallLabel}>My Equipment</BodyText>
+                  <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', marginTop: 4 }}>{myEquipment.length}</Text>
+                </View>
+              </View>
+            </View>
+
             <View style={styles.listHeader}>
               <Heading2 style={{ color: Colors.text.primary }}>Your Equipment</Heading2>
               <BodyText style={{ color: Colors.text.tertiary }}>({myEquipment.length})</BodyText>
@@ -579,57 +701,61 @@ export default function RentScreen() {
                       ]);
                     }}
                   >
-                    <View style={{ flexDirection: 'row', gap: 12 }}>
-                      <View style={[styles.equipmentImage, item.status === 'Maintenance' && { opacity: 0.6 }]}>
-                        <View style={styles.imagePlaceholder}>
-                          <MaterialIcons
-                            name={
-                              item.category === 'Tractor' ? 'agriculture' :
-                              item.category === 'Harvester' ? 'handyman' :
-                              item.category === 'Sprayer' ? 'water-drop' : 'construction'
-                            }
-                            size={32}
-                            color={Colors.primary}
+                    <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
+                      <View style={{ flexDirection: 'row', gap: 12, flex: 1 }}>
+                        <View style={[styles.equipmentImage, item.status === 'Maintenance' && { opacity: 0.6 }]}>
+                          <Image
+                            source={getCategoryImage(item.category)}
+                            style={[styles.imagePlaceholder, { borderRadius: 8 }]}
+                            resizeMode="cover"
                           />
-                        </View>
-                        {getEquipmentBookingStatus(item.id) ? (
-                          <View style={[styles.statusBadge, { backgroundColor: '#eab308' }]}>
-                            <Text style={[styles.statusBadgeText, { color: '#ffffff' }]}>Requested</Text>
-                          </View>
-                        ) : (
-                          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status).bg }]}>
-                            <Text style={[styles.statusBadgeText, { color: getStatusColor(item.status).text }]}>{item.status}</Text>
-                          </View>
-                        )}
-                      </View>
-
-                      <View style={{ flex: 1, justifyContent: 'space-between' }}>
-                        <View>
-                          <Heading2 style={{ color: Colors.text.primary, marginBottom: 4 }}>
-                            {item.name}
-                          </Heading2>
-                          <Text style={{ fontSize: 14, fontWeight: '600', color: Colors.primary, marginBottom: 4 }}>
-                            ₹{item.dailyRate.toLocaleString()}/day
-                          </Text>
-                          <BodyText style={{ color: Colors.text.secondary, fontSize: 12 }}>
-                            {item.city}, {item.state}
-                          </BodyText>
-                        </View>
-
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-                          <BodyText style={{ color: Colors.text.tertiary, fontSize: 11 }}>
-                            {item.totalBookings} bookings
-                          </BodyText>
-                          {bookingRequests.filter(br => br.equipmentId === item.id).length > 0 && (
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fef3c7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}>
-                              <MaterialIcons name="notifications-active" size={14} color="#f59e0b" />
-                              <Text style={{ fontSize: 12, fontWeight: '600', color: '#f59e0b' }}>
-                                {bookingRequests.filter(br => br.equipmentId === item.id).length} request(s)
-                              </Text>
+                          {getEquipmentBookingStatus(item.id) ? (
+                            <View style={[styles.statusBadge, { backgroundColor: '#eab308' }]}>
+                              <Text style={[styles.statusBadgeText, { color: '#ffffff' }]}>Requested</Text>
+                            </View>
+                          ) : (
+                            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status).bg }]}>
+                              <Text style={[styles.statusBadgeText, { color: getStatusColor(item.status).text }]}>{item.status}</Text>
                             </View>
                           )}
                         </View>
+
+                        <View style={{ flex: 1, justifyContent: 'space-between' }}>
+                          <View>
+                            <Heading2 style={{ color: Colors.text.primary, marginBottom: 4 }}>
+                              {item.name}
+                            </Heading2>
+                            <Text style={{ fontSize: 14, fontWeight: '600', color: Colors.primary, marginBottom: 4 }}>
+                              ₹{item.dailyRate.toLocaleString()}/day
+                            </Text>
+                            <BodyText style={{ color: Colors.text.secondary, fontSize: 12 }}>
+                              {item.city}, {item.state}
+                            </BodyText>
+                          </View>
+
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                            <BodyText style={{ color: Colors.text.tertiary, fontSize: 11 }}>
+                              {item.totalBookings} bookings
+                            </BodyText>
+                            {bookingRequests.filter(br => br.equipmentId === item.id).length > 0 && (
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fef3c7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}>
+                                <MaterialIcons name="notifications-active" size={14} color="#f59e0b" />
+                                <Text style={{ fontSize: 12, fontWeight: '600', color: '#f59e0b' }}>
+                                  {bookingRequests.filter(br => br.equipmentId === item.id).length} request(s)
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        </View>
                       </View>
+
+                      <TouchableOpacity 
+                        style={[styles.deleteBtn, { opacity: deletingEquipment === item.id ? 0.5 : 1 }]}
+                        onPress={() => handleDeleteEquipment(item.id)}
+                        disabled={deletingEquipment === item.id}
+                      >
+                        <MaterialIcons name="delete" size={20} color="#ef4444" />
+                      </TouchableOpacity>
                     </View>
                   </StyledCard>
                 ))}
@@ -917,11 +1043,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 30,
     backgroundColor: Colors.primary,
+    elevation: 8,
     shadowColor: Colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 8,
+    boxShadow: `0px 4px 8px ${Colors.primary}4d`,
   },
   fabText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
   bookBtn: {
@@ -949,6 +1076,12 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 10,
     fontWeight: '600',
+  },
+  deleteBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   tabsContainer: {
     flexDirection: 'row',

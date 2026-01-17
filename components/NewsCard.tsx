@@ -119,6 +119,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 12,
     elevation: 8,
+    boxShadow: '0px 8px 12px rgba(0, 0, 0, 0.12)',
     flex: 1,
     display: 'flex',
     flexDirection: 'column',

@@ -323,6 +323,7 @@ export default function FarmerServicesModal({ visible, onClose }: FarmerServices
             shadowOpacity: 0.1,
             shadowRadius: 2,
             elevation: 2,
+            boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.1)',
           }
         ]}
       >
@@ -567,7 +568,8 @@ export default function FarmerServicesModal({ visible, onClose }: FarmerServices
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 2 },
             shadowOpacity: 0.1,
-            shadowRadius: 4
+            shadowRadius: 4,
+            boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
           }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               {/* Only show header back button if not on main tab */}
@@ -613,7 +615,8 @@ export default function FarmerServicesModal({ visible, onClose }: FarmerServices
             shadowOffset: { width: 0, height: 1 },
             shadowOpacity: 0.05,
             shadowRadius: 2,
-            elevation: 1
+            elevation: 1,
+            boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.05)',
           }}> 
             <View style={[styles.tabBar, { paddingHorizontal: 16 }]}>
               <TouchableOpacity 
@@ -674,7 +677,8 @@ export default function FarmerServicesModal({ visible, onClose }: FarmerServices
                   shadowOffset: { width: 0, height: 2 },
                   shadowOpacity: 0.1,
                   shadowRadius: 4,
-                  elevation: 2
+                  elevation: 2,
+                  boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
                 }} 
                 onPress={() => setShowAddForm(true)}
               >
@@ -933,6 +937,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 5,
     elevation: 5,
+    boxShadow: '0px -3px 5px rgba(0, 0, 0, 0.1)',
   },
   modalHeader: {
     flexDirection: 'row',

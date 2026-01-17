@@ -949,7 +949,7 @@ User's question: "${prompt}"`;
                   )}
                 </View>
                 <View style={styles.weatherCardRight}>
-                  <Image source={getRainWeatherIcon()} style={styles.weatherImageRain} />
+                  <Image source={getRainWeatherIcon()} style={styles.weatherImageRain} resizeMode="contain" />
                 </View>
               </View>
             </View>
@@ -2184,7 +2184,6 @@ const styles = StyleSheet.create({
   weatherImageRain: {
     width: 120,
     height: 120,
-    resizeMode: 'contain',
   },
   weatherCard: {
     width: '100%',

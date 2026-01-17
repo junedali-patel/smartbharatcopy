@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, SafeAreaView, ActivityIndicator, Modal } from 'react-native';
-import { FontAwesome } from '@expo/vector-icons';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, SafeAreaView, ActivityIndicator, Image } from 'react-native';
+import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
+import Svg, { Line, Polyline, Circle } from 'react-native-svg';
+import { useRouter } from 'expo-router';
 
 interface CropData {
   id: string;
@@ -17,28 +19,185 @@ interface CropData {
   distance: string;
   transportCost: string;
   supplyAddress: string;
+  imageUrl?: string;
+  distanceKm?: number;
+  priceHistory?: number[];
 }
 
-// Mock Data for Crop Prices with added details
+// Mock Data for Crop Prices with price history for graphs
 const mockCropData: CropData[] = [
-  { id: '1', cropName: 'Tomato', category: 'Vegetable', variety: 'Hybrid', marketName: 'Pune Market', location: 'Pune', pinCode: '411001', minPrice: 25, maxPrice: 35, modalPrice: 30, priceUnit: 'kg', distance: '50 km', transportCost: '₹300', supplyAddress: 'Market Yard, Gate No. 1, Pune, Maharashtra 411037' },
-  { id: '2', cropName: 'Onion', category: 'Vegetable', variety: 'Red', marketName: 'Nashik Market', location: 'Nashik', pinCode: '422001', minPrice: 15, maxPrice: 25, modalPrice: 20, priceUnit: 'kg', distance: '200 km', transportCost: '₹1200', supplyAddress: 'Nashik Main Market, Nashik, Maharashtra 422001' },
-  { id: '3', cropName: 'Potato', category: 'Vegetable', variety: 'Local', marketName: 'Pune Market', location: 'Pune', pinCode: '411001', minPrice: 10, maxPrice: 18, modalPrice: 15, priceUnit: 'kg', distance: '50 km', transportCost: '₹250', supplyAddress: 'Market Yard, Gate No. 1, Pune, Maharashtra 411037' },
-  { id: '4', cropName: 'Apple', category: 'Fruit', variety: 'Shimla', marketName: 'Mumbai Market', location: 'Mumbai', pinCode: '400001', minPrice: 80, maxPrice: 120, modalPrice: 100, priceUnit: 'kg', distance: '150 km', transportCost: '₹900', supplyAddress: 'APMC Market, Vashi, Navi Mumbai, Maharashtra 400703' },
-  { id: '5', cropName: 'Mango', category: 'Fruit', variety: 'Alphonso', marketName: 'Ratnagiri Market', location: 'Ratnagiri', pinCode: '415612', minPrice: 200, maxPrice: 400, modalPrice: 300, priceUnit: 'kg', distance: '330 km', transportCost: '₹2000', supplyAddress: 'Ratnagiri APMC, Ratnagiri, Maharashtra 415612' },
-  { id: '6', cropName: 'Wheat', category: 'Grain', variety: 'Lokwan', marketName: 'Nagpur Market', location: 'Nagpur', pinCode: '440001', minPrice: 2000, maxPrice: 2500, modalPrice: 2200, priceUnit: 'quintal', distance: '250 km', transportCost: '₹1500', supplyAddress: 'Kalamna Market, Kamptee Road, Nagpur, Maharashtra 440026' },
-  { id: '7', cropName: 'Rice', category: 'Grain', variety: 'Basmati', marketName: 'Nagpur Market', location: 'Nagpur', pinCode: '440001', minPrice: 5000, maxPrice: 7000, modalPrice: 6000, priceUnit: 'quintal', distance: '250 km', transportCost: '₹1800', supplyAddress: 'Kalamna Market, Kamptee Road, Nagpur, Maharashtra 440026' },
+  { 
+    id: '1', 
+    cropName: 'Tomato', 
+    category: 'Vegetable', 
+    variety: 'Hybrid', 
+    marketName: 'Pune Market', 
+    location: 'Pune', 
+    pinCode: '411001', 
+    minPrice: 25, 
+    maxPrice: 35, 
+    modalPrice: 30, 
+    priceUnit: 'kg', 
+    distance: '50 km', 
+    transportCost: '₹300', 
+    supplyAddress: 'Market Yard, Gate No. 1, Pune, Maharashtra 411037',
+    imageUrl: 'https://picsum.photos/seed/tomato/100/100',
+    distanceKm: 4.2,
+    priceHistory: [25, 26, 28, 27, 29, 31, 30, 32, 31, 33, 35, 30]
+  },
+  { 
+    id: '2', 
+    cropName: 'Onion', 
+    category: 'Vegetable', 
+    variety: 'Red', 
+    marketName: 'Nashik Market', 
+    location: 'Nashik', 
+    pinCode: '422001', 
+    minPrice: 15, 
+    maxPrice: 25, 
+    modalPrice: 20, 
+    priceUnit: 'kg', 
+    distance: '200 km', 
+    transportCost: '₹1200', 
+    supplyAddress: 'Nashik Main Market, Nashik, Maharashtra 422001',
+    imageUrl: 'https://picsum.photos/seed/onion/100/100',
+    distanceKm: 1.5,
+    priceHistory: [15, 16, 17, 18, 19, 20, 21, 22, 21, 20, 22, 25]
+  },
+  { 
+    id: '3', 
+    cropName: 'Potato', 
+    category: 'Vegetable', 
+    variety: 'Local', 
+    marketName: 'Pune Market', 
+    location: 'Pune', 
+    pinCode: '411001', 
+    minPrice: 10, 
+    maxPrice: 18, 
+    modalPrice: 15, 
+    priceUnit: 'kg', 
+    distance: '50 km', 
+    transportCost: '₹250', 
+    supplyAddress: 'Market Yard, Gate No. 1, Pune, Maharashtra 411037',
+    imageUrl: 'https://picsum.photos/seed/potato/100/100',
+    distanceKm: 8.7,
+    priceHistory: [10, 11, 11, 12, 13, 14, 15, 16, 15, 14, 16, 18]
+  },
+  { 
+    id: '4', 
+    cropName: 'Apple', 
+    category: 'Fruit', 
+    variety: 'Shimla', 
+    marketName: 'Mumbai Market', 
+    location: 'Mumbai', 
+    pinCode: '400001', 
+    minPrice: 80, 
+    maxPrice: 120, 
+    modalPrice: 100, 
+    priceUnit: 'kg', 
+    distance: '150 km', 
+    transportCost: '₹900', 
+    supplyAddress: 'APMC Market, Vashi, Navi Mumbai, Maharashtra 400703',
+    imageUrl: 'https://picsum.photos/seed/apple/100/100',
+    distanceKm: 12.8,
+    priceHistory: [80, 85, 88, 90, 92, 95, 98, 100, 105, 110, 115, 120]
+  },
+  { 
+    id: '5', 
+    cropName: 'Mango', 
+    category: 'Fruit', 
+    variety: 'Alphonso', 
+    marketName: 'Ratnagiri Market', 
+    location: 'Ratnagiri', 
+    pinCode: '415612', 
+    minPrice: 200, 
+    maxPrice: 400, 
+    modalPrice: 300, 
+    priceUnit: 'kg', 
+    distance: '330 km', 
+    transportCost: '₹2000', 
+    supplyAddress: 'Ratnagiri APMC, Ratnagiri, Maharashtra 415612',
+    imageUrl: 'https://picsum.photos/seed/mango/100/100',
+    distanceKm: 140,
+    priceHistory: [200, 220, 240, 260, 280, 300, 320, 340, 360, 380, 400, 300]
+  },
+  { 
+    id: '6', 
+    cropName: 'Wheat', 
+    category: 'Grain', 
+    variety: 'Lokwan', 
+    marketName: 'Nagpur Market', 
+    location: 'Nagpur', 
+    pinCode: '440001', 
+    minPrice: 2000, 
+    maxPrice: 2500, 
+    modalPrice: 2200, 
+    priceUnit: 'quintal', 
+    distance: '250 km', 
+    transportCost: '₹1500', 
+    supplyAddress: 'Kalamna Market, Kamptee Road, Nagpur, Maharashtra 440026',
+    imageUrl: 'https://picsum.photos/seed/wheat/100/100',
+    distanceKm: 12.8,
+    priceHistory: [2000, 2050, 2100, 2150, 2180, 2200, 2250, 2300, 2350, 2400, 2500, 2200]
+  },
 ];
 
 const categories = ['All', 'Vegetable', 'Fruit', 'Grain'];
 
+const TrendGraph = ({ priceHistory }: { priceHistory?: number[] }) => {
+  if (!priceHistory || priceHistory.length === 0) return null;
+
+  const width = 220;
+  const height = 80;
+  const padding = 10;
+  const graphWidth = width - padding * 2;
+  const graphHeight = height - padding * 2;
+
+  const minPrice = Math.min(...priceHistory);
+  const maxPrice = Math.max(...priceHistory);
+  const priceRange = maxPrice - minPrice || 1;
+
+  const points = priceHistory.map((price, index) => {
+    const x = padding + (index / (priceHistory.length - 1)) * graphWidth;
+    const y = height - padding - ((price - minPrice) / priceRange) * graphHeight;
+    return { x, y, price };
+  });
+
+  const polylinePoints = points.map(p => `${p.x},${p.y}`).join(' ');
+
+  return (
+    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      <Line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="#E5E7EB" strokeWidth="1" />
+      <Line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#E5E7EB" strokeWidth="1" />
+      <Polyline
+        points={polylinePoints}
+        fill="none"
+        stroke="#2E7D32"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {points.map((point, index) => (
+        <Circle
+          key={index}
+          cx={point.x}
+          cy={point.y}
+          r="3"
+          fill={index === priceHistory.length - 1 ? '#2E7D32' : '#4CAF50'}
+          opacity={index === priceHistory.length - 1 ? 1 : 0.7}
+        />
+      ))}
+    </Svg>
+  );
+};
+
 export default function MarketPriceScreen() {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [isLoading, setIsLoading] = useState(false);
   const [filteredData, setFilteredData] = useState(mockCropData);
-  const [isModalVisible, setIsModalVisible] = useState(false);
-  const [selectedCrop, setSelectedCrop] = useState<CropData | null>(null);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
 
   const handleSearch = () => {
     setIsLoading(true);
@@ -54,6 +213,13 @@ export default function MarketPriceScreen() {
     }, 1000);
   };
 
+  const handleCropPress = (cropId: string) => {
+    router.push({
+      pathname: '/cropDetails',
+      params: { id: cropId }
+    });
+  };
+
   const categorizedData = useMemo(() => {
     if (selectedCategory === 'All') {
       return filteredData;
@@ -61,154 +227,122 @@ export default function MarketPriceScreen() {
     return filteredData.filter(item => item.category === selectedCategory);
   }, [selectedCategory, filteredData]);
 
-  const handleCardPress = (item: CropData) => {
-    setSelectedCrop(item);
-    setIsModalVisible(true);
-  };
-
-  const renderPriceDetails = () => {
-    if (!selectedCrop) return null;
-
-    const { modalPrice, priceUnit } = selectedCrop;
-    const pricePerKg = priceUnit === 'quintal' ? modalPrice / 100 : modalPrice;
-    const pricePerQuintal = priceUnit === 'kg' ? modalPrice * 100 : modalPrice;
-
-    return (
-      <View>
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Price per Kg:</Text>
-          <Text style={styles.detailValue}>₹{pricePerKg.toFixed(2)}</Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Price per Quintal:</Text>
-          <Text style={styles.detailValue}>₹{pricePerQuintal.toFixed(2)}</Text>
-        </View>
-      </View>
-    );
-  };
-
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Market Prices</Text>
-      </View>
-
-      {/* Search bar card */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchCard}>
-          <FontAwesome name="search" size={16} color="#A0A0A0" style={styles.searchIcon} />
+        <View style={styles.headerTop}>
+          <Text style={styles.headerTitle}>Mandi Prices</Text>
+          <TouchableOpacity style={styles.notificationButton}>
+            <MaterialIcons name="notifications" size={20} color="#6B7280" />
+          </TouchableOpacity>
+        </View>
+        
+        {/* Search Bar */}
+        <View style={[
+          styles.searchContainer,
+          {
+            borderWidth: isSearchFocused ? 2 : 0,
+            borderColor: isSearchFocused ? '#2E7D32' : 'transparent'
+          }
+        ]}>
+          <FontAwesome name="search" size={16} color="#9CA3AF" style={styles.searchIcon} />
           <TextInput
-            style={styles.input}
-            placeholder="Search by Crop, Location, Pincode"
-            placeholderTextColor="#A0A0A0"
+            style={styles.searchInput}
+            placeholder="Search crop, market or location..."
+            placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
+            onFocus={() => setIsSearchFocused(true)}
+            onBlur={() => setIsSearchFocused(false)}
             onSubmitEditing={handleSearch}
           />
-          <TouchableOpacity onPress={handleSearch}>
-            <FontAwesome name="microphone" size={18} color="#A0A0A0" />
+          <TouchableOpacity style={styles.micButton}>
+            <FontAwesome name="microphone" size={16} color="#2E7D32" />
           </TouchableOpacity>
         </View>
       </View>
+      
+      {/* Main Content */}
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.contentHeader}>
+          <Text style={styles.contentTitle}>Today's Market Prices</Text>
+          <Text style={styles.updateTime}>Updated 5m ago</Text>
+        </View>
 
-      <View style={styles.filterContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {categories.map(category => (
-            <TouchableOpacity
-              key={category}
-              style={[styles.filterButton, selectedCategory === category && styles.filterButtonActive]}
-              onPress={() => setSelectedCategory(category)}
-            >
-              <Text style={[styles.filterButtonText, selectedCategory === category && styles.filterButtonTextActive]}>
-                {category}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      {isLoading ? (
-        <ActivityIndicator size="large" color="#2E7D32" style={styles.loader} />
-      ) : (
-        <ScrollView contentContainerStyle={styles.listContainer}>
-          {categorizedData.length > 0 ? (
-            categorizedData.map(item => (
-              <TouchableOpacity key={item.id} onPress={() => handleCardPress(item)}>
-                <View style={styles.card}>
-                  <View style={styles.cardRow}>
-                    <View style={styles.cardLeft}>
-                      <Text style={styles.cropName}>
-                        {item.cropName} ({item.variety})
-                      </Text>
-                      <Text style={styles.marketName}>{item.marketName}, {item.location}</Text>
+        {isLoading ? (
+          <ActivityIndicator size="large" color="#2E7D32" style={styles.loader} />
+        ) : (
+          <View style={styles.cardsContainer}>
+            {categorizedData.length > 0 ? (
+              categorizedData.map(item => (
+                <TouchableOpacity 
+                  key={item.id}
+                  onPress={() => handleCropPress(item.id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.premiumCard}>
+                    {/* Card Header with Image and Price */}
+                    <View style={styles.cardHeader}>
+                      <Image 
+                        source={{ uri: item.imageUrl || 'https://picsum.photos/seed/default/100/100' }} 
+                        style={styles.cropImage}
+                      />
+                      <View style={styles.cardContent}>
+                        <View style={styles.cardLeft}>
+                          <Text style={styles.cropName}>{item.cropName} ({item.variety})</Text>
+                          <View style={styles.locationRow}>
+                            <FontAwesome name="map-marker" size={12} color="#6B7280" />
+                            <Text style={styles.locationText}>{item.marketName}, {item.location}</Text>
+                          </View>
+                          <Text style={styles.distanceText}>📍 {item.distanceKm || '4.2'} km away</Text>
+                        </View>
+                        <View style={styles.cardRight}>
+                          <Text style={styles.priceRange}>₹{item.minPrice}-{item.maxPrice}</Text>
+                          <Text style={styles.currentPrice}>₹{item.modalPrice}/{item.priceUnit}</Text>
+                          <View style={[
+                            styles.priceStatus,
+                            { backgroundColor: item.modalPrice > item.minPrice ? '#dcfce7' : '#fee2e2' }
+                          ]}>
+                            <MaterialIcons 
+                              name={item.modalPrice > item.minPrice ? "trending-up" : "trending-down"}
+                              size={12}
+                              color={item.modalPrice > item.minPrice ? "#22c55e" : "#ef4444"}
+                            />
+                            <Text style={[
+                              styles.priceStatusText,
+                              { color: item.modalPrice > item.minPrice ? "#22c55e" : "#ef4444" }
+                            ]}>
+                              {item.modalPrice > item.minPrice ? '+' : ''}{Math.round(((item.modalPrice - item.minPrice) / item.minPrice) * 10)}%
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
                     </View>
-                    <View style={styles.cardRight}>
-                      <Text style={styles.priceRange}>
-                        ₹{item.minPrice}-{item.maxPrice}/{item.priceUnit}
-                      </Text>
-                      <Text style={styles.modalPrice}>
-                        ₹{item.modalPrice}/{item.priceUnit}
-                      </Text>
+                    
+                    {/* Price Trend Graph */}
+                    <View style={styles.graphSection}>
+                      <View style={styles.graphHeader}>
+                        <Text style={styles.graphLabel}>7-Day Price Trend</Text>
+                        <Text style={styles.graphSubLabel}>Last 7 days</Text>
+                      </View>
+                      <View style={styles.graphContainer}>
+                        <TrendGraph priceHistory={item.priceHistory} />
+                      </View>
                     </View>
                   </View>
-                </View>
-              </TouchableOpacity>
-            ))
-          ) : (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No results found.</Text>
-            </View>
-          )}
-        </ScrollView>
-      )}
-
-      {selectedCrop && (
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={isModalVisible}
-          onRequestClose={() => setIsModalVisible(false)}
-        >
-          <View style={styles.modalContainer}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>{selectedCrop.cropName} ({selectedCrop.variety})</Text>
-                <TouchableOpacity onPress={() => setIsModalVisible(false)}>
-                  <FontAwesome name="close" size={24} color="#333" />
                 </TouchableOpacity>
+              ))
+            ) : (
+              <View style={styles.emptyContainer}>
+                <MaterialIcons name="search" size={48} color="#D1D5DB" />
+                <Text style={styles.emptyText}>No results found</Text>
+                <Text style={styles.emptySubText}>Try searching with different keywords</Text>
               </View>
-
-              <ScrollView>
-                <View style={styles.detailSection}>
-                  <Text style={styles.sectionTitle}>Price Details</Text>
-                  {renderPriceDetails()}
-                </View>
-
-                <View style={styles.detailSection}>
-                  <Text style={styles.sectionTitle}>Logistics</Text>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Market Location:</Text>
-                    <Text style={styles.detailValue}>{selectedCrop.marketName}</Text>
-                  </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Distance:</Text>
-                    <Text style={styles.detailValue}>{selectedCrop.distance}</Text>
-                  </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Est. Transport Cost:</Text>
-                    <Text style={styles.detailValue}>{selectedCrop.transportCost}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.detailSection}>
-                  <Text style={styles.sectionTitle}>Supply Address</Text>
-                  <Text style={styles.addressText}>{selectedCrop.supplyAddress}</Text>
-                </View>
-              </ScrollView>
-            </View>
+            )}
           </View>
-        </Modal>
-      )}
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -216,30 +350,37 @@ export default function MarketPriceScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F4F8F3',
+    backgroundColor: '#F8FAF9',
   },
   header: {
     backgroundColor: 'transparent',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   headerTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  notificationButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
   },
   searchContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  searchCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#fff',
     borderRadius: 24,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -247,153 +388,164 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   searchIcon: {
-    marginRight: 8,
+    marginRight: 12,
   },
-  input: {
+  searchInput: {
     flex: 1,
-    height: 40,
     fontSize: 14,
-  },
-  filterContainer: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    color: '#1F2937',
     backgroundColor: 'transparent',
-  },
-  filterButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    backgroundColor: '#e9ecef',
-    marginRight: 10,
-  },
-  filterButtonActive: {
-    backgroundColor: '#2E7D32',
-  },
-  filterButtonText: {
-    color: '#333',
-    fontWeight: '500',
-  },
-  filterButtonTextActive: {
-    color: '#fff',
-  },
-  loader: {
-    marginTop: 30,
-  },
-  listContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
-  card: {
-    backgroundColor: '#fff',
+  } as any,
+  micButton: {
+    padding: 6,
     borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: '#F3F4F6',
+    marginLeft: 12,
   },
-  cardRow: {
+  content: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  contentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 16,
   },
-  cardLeft: {
-    flexShrink: 1,
-    paddingRight: 12,
-  },
-  cardRight: {
-    alignItems: 'flex-end',
-  },
-  cropName: {
+  contentTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '700',
+    color: '#1F2937',
   },
-  marketName: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
+  updateTime: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
   },
-  priceContainer: {
+  cardsContainer: {
+    gap: 16,
+    paddingBottom: 100,
+  },
+  premiumCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  cropImage: {
+    width: 70,
+    height: 70,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+  },
+  cardContent: {
+    flex: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  priceRange: {
-    fontSize: 12,
-    color: '#777',
+  cardLeft: {
+    flex: 1,
+    gap: 4,
   },
-  modalPrice: {
-    marginTop: 4,
-    fontSize: 18,
-    fontWeight: 'bold',
+  cropName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  locationText: {
+    fontSize: 12,
+    color: '#6B7280',
+    flex: 1,
+  },
+  distanceText: {
+    fontSize: 12,
     color: '#2E7D32',
+    fontWeight: '500',
+  },
+  cardRight: {
+    alignItems: 'flex-end',
+    justifyContent: 'flex-start',
+    gap: 4,
+  },
+  priceRange: {
+    fontSize: 11,
+    color: '#9CA3AF',
+  },
+  currentPrice: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#2E7D32',
+  },
+  priceStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 4,
+  },
+  priceStatusText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  graphSection: {
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    paddingTop: 12,
+  },
+  graphHeader: {
+    marginBottom: 12,
+  },
+  graphLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  graphSubLabel: {
+    fontSize: 11,
+    color: '#9CA3AF',
+  },
+  graphContainer: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  loader: {
+    marginTop: 30,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 50,
+    marginBottom: 50,
   },
   emptyText: {
     fontSize: 16,
-    color: '#666',
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 12,
   },
-  // Modal Styles
-  modalContainer: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    height: '60%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
-    paddingBottom: 10,
-    marginBottom: 15,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  detailSection: {
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#2E7D32',
-    marginBottom: 10,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  detailLabel: {
-    fontSize: 14,
-    color: '#666',
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#333',
-  },
-  addressText: {
-    fontSize: 14,
-    color: '#333',
-    lineHeight: 20,
+  emptySubText: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 4,
   },
 });

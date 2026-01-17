@@ -16,7 +16,7 @@ if (Platform.OS !== 'web') {
 type SpeechResultCallback = (text: string) => void;
 type SpeechEndCallback = () => void;
 
-const GEMINI_API_KEY = 'AIzaSyATFG-N_HT4IFm8SHGLnlAFtH_7fzqB_j0';
+const GEMINI_API_KEY = 'AIzaSyDaLIkmG8V1E1synWS1xkD_bCy8eni7Wj4';
 const genAI = isGeminiAvailable() ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
 
 class VoiceService {
@@ -43,7 +43,7 @@ class VoiceService {
       this.initializeVoice();
     }
     if (isGeminiAvailable()) {
-      this.genAI = new GoogleGenerativeAI('AIzaSyATFG-N_HT4IFm8SHGLnlAFtH_7fzqB_j0');
+      this.genAI = new GoogleGenerativeAI('AIzaSyDaLIkmG8V1E1synWS1xkD_bCy8eni7Wj4');
     }
   }
 
